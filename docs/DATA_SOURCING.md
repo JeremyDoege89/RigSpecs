@@ -16,8 +16,9 @@ records what was built, the decisions made along the way, and what is still open
 - The profile shows "N to review" under the header on every tab, rows carry an "Unverified ·
   from …" badge, and fleet cards show a count. Safety-critical rows (brakes, wheels, aerial,
   pump) keep their verify-against-the-manual warning after confirmation.
-- Global search doesn't exist yet (build plan milestone 5); its results should badge unverified
-  rows when it does.
+- Global search (build plan milestone 5) badges unverified hits, and rows imported from CSV land
+  unverified with the source "from CSV". Review's "Confirm all I've checked" skips safety-critical
+  rows, which are confirmed one at a time.
 
 ## Deep links (spec step 2): done
 

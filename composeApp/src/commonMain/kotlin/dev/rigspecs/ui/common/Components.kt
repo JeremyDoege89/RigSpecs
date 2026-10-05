@@ -13,9 +13,12 @@ import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.FireTruck
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -39,6 +42,8 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.rigspecs.domain.VehicleType
@@ -85,6 +90,30 @@ fun FormField(
         enabled = enabled,
         trailingIcon = trailing,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType, capitalization = capitalization),
+    )
+}
+
+/** A shared secret: masked so it doesn't end up in screenshots, with an eye button to check what was typed. */
+@Composable
+fun SecretField(value: String, onValueChange: (String) -> Unit, label: String, supporting: String? = null) {
+    var shown by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        modifier = Modifier.fillMaxWidth(),
+        supportingText = supporting?.let { { Text(it) } },
+        singleLine = true,
+        visualTransformation = if (shown) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { shown = !shown }) {
+                Icon(
+                    if (shown) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    contentDescription = (if (shown) "Hide " else "Show ") + label.lowercase(),
+                )
+            }
+        },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, capitalization = KeyboardCapitalization.None),
     )
 }
 

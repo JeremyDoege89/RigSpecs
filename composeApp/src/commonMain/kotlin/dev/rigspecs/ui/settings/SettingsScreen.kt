@@ -41,6 +41,7 @@ import dev.rigspecs.data.importing.ExtractionService
 import dev.rigspecs.domain.Portal
 import dev.rigspecs.domain.isAllowedPortalUrl
 import dev.rigspecs.ui.common.FormField
+import dev.rigspecs.ui.common.SecretField
 import dev.rigspecs.ui.theme.TouchTarget
 import dev.rigspecs.ui.theme.WarnColor
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -175,9 +176,9 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
                 supporting = "https://<project>.supabase.co", keyboardType = KeyboardType.Uri, capitalization = KeyboardCapitalization.None,
             )
             FormField(f.serverKey, { v -> viewModel.edit { it.copy(serverKey = v) } }, "Server public (anon) key", capitalization = KeyboardCapitalization.None)
-            FormField(
+            SecretField(
                 f.importSecret, { v -> viewModel.edit { it.copy(importSecret = v) } }, "Import passphrase",
-                supporting = "The passphrase set on the server (IMPORT_SHARED_SECRET)", capitalization = KeyboardCapitalization.None,
+                supporting = "The passphrase set on the server (IMPORT_SHARED_SECRET)",
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(

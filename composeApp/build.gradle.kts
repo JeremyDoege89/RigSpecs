@@ -84,20 +84,16 @@ kotlin {
             }
             implementation(libs.exifinterface)
         }
-        val desktopMain by getting {
-            dependencies {
-                implementation(compose.desktop.currentOs)
-                implementation(libs.coroutines.swing)
-                implementation(libs.ktor.client.okhttp)
-                implementation(libs.pdfbox)
-            }
+        getByName("desktopMain").dependencies {
+            implementation(compose.desktop.currentOs)
+            implementation(libs.coroutines.swing)
+            implementation(libs.ktor.client.okhttp)
+            implementation(libs.pdfbox)
         }
-        val desktopTest by getting {
-            dependencies {
-                implementation(libs.compose.ui.test)
-                implementation(libs.room.testing)
-                implementation(compose.desktop.currentOs)
-            }
+        getByName("desktopTest").dependencies {
+            implementation(libs.compose.ui.test)
+            implementation(libs.room.testing)
+            implementation(compose.desktop.currentOs)
         }
     }
 }
@@ -124,7 +120,7 @@ compose.desktop {
             // Msi builds only on Windows; Deb lets this Linux host smoke-test packaging.
             targetFormats(TargetFormat.Msi, TargetFormat.Deb)
             packageName = "RigSpecs"
-            packageVersion = "0.3.1"
+            packageVersion = "0.4.0"
             description = "Specs, torque values, fluids and part numbers for every rig"
             vendor = "Rig Specs"
             // On top of Compose's defaults (java.desktop, java.logging, jdk.crypto.ec): what
