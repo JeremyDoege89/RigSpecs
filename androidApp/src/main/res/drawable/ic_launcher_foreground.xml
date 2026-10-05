@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A hex nut: torque specs, part numbers. Kept inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFF6B3D"
+        android:fillType="evenOdd"
+        android:pathData="M54,25 L79.1,39.5 L79.1,68.5 L54,83 L28.9,68.5 L28.9,39.5 Z M54,42 A12,12 0 1,0 54,66 A12,12 0 1,0 54,42 Z" />
+</vector>
