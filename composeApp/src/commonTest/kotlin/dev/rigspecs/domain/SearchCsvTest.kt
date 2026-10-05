@@ -75,6 +75,26 @@ class SearchTest {
     }
 
     @Test
+    fun aQueryThatNamesARigStaysOnThatRig() {
+        // "engine" is also in Engine oil and the Engine parts system, and Medic 3 is at Station 2.
+        val named = index.search("engine 2")
+        assertEquals(listOf("e2"), named.map { it.vehicle.id })
+        assertTrue(named.single().rigMatches)
+        assertTrue(named.single().hits.isEmpty())
+        assertEquals(listOf("Engine 2" to "s3"), hits("engine 2 oil capacity"))
+        assertEquals(listOf("Engine 2" to "p3"), hits("filter engine2"))
+        // Not a unit number, so it's an ordinary search across rigs.
+        assertEquals(setOf("Medic 3" to "p1", "Medic 30" to "p2", "Engine 2" to "p3"), hits("oil filter").toSet())
+        // A unit number without a digit doesn't take over: a rig called Air, and "air filter".
+        val withAir = SearchIndex(
+            rigs + rig("air", "Air"),
+            specs,
+            parts + part("p4", "air", "Air filter", "P608667") + part("p5", "e2", "Air filter", "P181064"),
+        )
+        assertEquals(setOf("air", "e2"), withAir.search("air filter").map { it.vehicle.id }.toSet())
+    }
+
+    @Test
     fun unverifiedHitsAreFlagged() {
         val e2 = index.search("lug torque").single { it.vehicle.id == "e2" }
         assertTrue(e2.hits.single().isUnverified)

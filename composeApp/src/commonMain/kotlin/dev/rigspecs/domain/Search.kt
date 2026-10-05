@@ -18,6 +18,11 @@ data class SearchGroup(val vehicle: VehicleEntity, val rigMatches: Boolean, val 
  * rig's own details or the item's ("oil filter medic 3"), and at least one word has to match the
  * item itself, so a query that only names a rig finds the rig, not each of its 40 fields.
  *
+ * A query that contains a rig's unit number ("engine 2 oil", "engine2 oil") is about that rig
+ * alone, and the rest of the query picks its items. Without this, "engine 2" would list the engine
+ * oil and engine parts of every rig with a 2 anywhere in its details, such as Station 2. Only unit
+ * numbers with a number in them count, so a rig called just "Air" doesn't take over "air filter".
+ *
  * Words match the start of a word ("lug" finds "Lug nuts"); numbers match whole numbers only, so
  * "Medic 3" doesn't also find Medic 30. Punctuation is ignored, so "LF-9009" finds "LF9009".
  * Blank fields aren't searched: crews look for values.
@@ -33,6 +38,10 @@ class SearchIndex(vehicles: List<VehicleEntity>, specs: List<SpecItemEntity>, pa
             v.bodyBuilder, v.builderJobNumber, v.engine, v.engineSerial, v.station,
         )
     }
+    /** Each rig's unit number in words: "Engine 2" gives engine, 2. */
+    private val unitWords: Map<String, List<String>> = rigs.mapValues { (_, v) ->
+        v.unitNumber.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+    }.filterValues { words -> words.any { w -> w.any { it.isDigit() } } }
     private val entries: List<Entry> =
         specs.filter { !it.deleted && it.value.isNotBlank() && it.vehicleId in rigs }.map {
             Entry(it, null, it.vehicleId, searchTokens(it.component, it.name, it.value, it.unit, it.notes, it.category.label))
@@ -43,12 +52,26 @@ class SearchIndex(vehicles: List<VehicleEntity>, specs: List<SpecItemEntity>, pa
     fun search(query: String, limit: Int = 200): List<SearchGroup> {
         val words = queryWords(query)
         if (words.isEmpty()) return emptyList()
-        val rigMatches = rigTokens.filterValues { tokens -> words.all { matches(it, tokens) } }.keys
-        val hits = entries.mapNotNull { e ->
+        val named = mutableSetOf<String>()
+        val nameWords = mutableSetOf<Int>()
+        unitWords.forEach { (id, unit) ->
+            unitIn(words, unit)?.let {
+                named += id
+                nameWords += it
+            }
+        }
+        val itemWords = words.filterIndexed { i, _ -> i !in nameWords }
+        val rigMatches = named.ifEmpty { rigTokens.filterValues { tokens -> words.all { matches(it, tokens) } }.keys }
+        val candidates = when {
+            itemWords.isEmpty() -> emptyList()
+            named.isEmpty() -> entries
+            else -> entries.filter { it.vehicleId in named }
+        }
+        val hits = candidates.mapNotNull { e ->
             val rig = rigTokens.getValue(e.vehicleId)
             var score = 0
             var onItem = false
-            for (w in words) {
+            for (w in itemWords) {
                 score += when {
                     e.tokens.contains(w) -> 3.also { onItem = true }
                     matches(w, e.tokens) -> 2.also { onItem = true }
@@ -72,6 +95,17 @@ class SearchIndex(vehicles: List<VehicleEntity>, specs: List<SpecItemEntity>, pa
 
     private fun matches(word: String, tokens: Set<String>): Boolean =
         if (word.all { it.isDigit() }) word in tokens else tokens.any { it.startsWith(word) }
+
+    /** Where the query spells out a unit number, word for word or run together; null if it doesn't. */
+    private fun unitIn(words: List<String>, unit: List<String>): IntRange? {
+        val joined = unit.joinToString("")
+        words.indices.forEach { i ->
+            if (words[i] == joined) return i..i
+            val end = i + unit.size - 1
+            if (end < words.size && unit.indices.all { k -> words[i + k] == unit[k] }) return i..end
+        }
+        return null
+    }
 }
 
 /** Query words with punctuation dropped: "LF-9009" becomes "lf9009", "15W-40" becomes "15w40". */
