@@ -116,6 +116,7 @@ class ImportFlowTest {
                 val settings = koin.get<SettingsRepository>()
                 settings.set(SettingsRepository.Keys.SERVER_URL, "https://example.supabase.co")
                 settings.set(SettingsRepository.Keys.SERVER_KEY, "anon")
+                settings.set(SettingsRepository.Keys.IMPORT_SECRET, "hose")
                 val vid = rigs.saveVehicle(
                     VehicleEntity(id = "", departmentId = "", unitNumber = "Engine 2", type = VehicleType.ENGINE, make = "Pierce", updatedAt = 0, updatedBy = ""),
                     rigs.templateItems(VehicleType.ENGINE),

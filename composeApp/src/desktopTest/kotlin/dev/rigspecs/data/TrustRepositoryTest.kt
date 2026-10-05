@@ -122,6 +122,8 @@ class TrustRepositoryTest {
         settings.set(Portal.CUMMINS.urlKey, "https://qs.example/esn/{esn}")
         settings.set(SettingsRepository.Keys.SERVER_URL, "https://abc.supabase.co/")
         settings.set(SettingsRepository.Keys.SERVER_KEY, "anon")
+        assertTrue(!settings.current().importReady) // still needs the passphrase
+        settings.set(SettingsRepository.Keys.IMPORT_SECRET, "hose")
         val s = settings.observe().first()
         assertEquals("https://qs.example/esn/{esn}", s.portalUrls[Portal.CUMMINS])
         assertEquals("https://abc.supabase.co/functions/v1/extract-specs", s.extractUrl)

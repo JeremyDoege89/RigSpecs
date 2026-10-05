@@ -8,8 +8,13 @@ import { type CallModel, extract, parseRequest, type Reply, RequestError, sameSe
 export async function handle(request: Request, env: (name: string) => string | undefined, callModel: CallModel | null): Promise<Response> {
   if (request.method !== "POST") return reply({ status: 405, body: { error: "Use POST." } });
 
+  // The function runs without the platform's JWT check (new projects' public keys aren't JWTs),
+  // so the passphrase is the lock: without one set, it refuses everything.
   const secret = env("IMPORT_SHARED_SECRET");
-  if (secret && !sameSecret(request.headers.get("x-rigspecs-secret") ?? "", secret)) {
+  if (!secret) {
+    return reply({ status: 500, body: { error: "The server's import passphrase isn't set (IMPORT_SHARED_SECRET).", code: "server_config" } });
+  }
+  if (!sameSecret(request.headers.get("x-rigspecs-secret") ?? "", secret)) {
     return reply({ status: 401, body: { error: "Wrong import passphrase. Check Settings on the device.", code: "server_config" } });
   }
 

@@ -168,7 +168,7 @@ fun ImportSetupScreen(
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Assisted import isn't set up on this device", style = MaterialTheme.typography.titleMedium)
-                        Text("It needs the department's server address and key, or it's switched off in Settings.", style = MaterialTheme.typography.bodyMedium)
+                        Text("It needs the department's server address, key and import passphrase, or it's switched off in Settings.", style = MaterialTheme.typography.bodyMedium)
                         OutlinedButton(onClick = onOpenSettings, modifier = Modifier.heightIn(min = TouchTarget)) { Text("Open Settings") }
                     }
                 }

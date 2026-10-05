@@ -165,8 +165,8 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
                 viewModel.edit { it.copy(importEnabled = on) }
             }
             Text(
-                "The department's server holds the model key; this device only needs the server's address and its public key. " +
-                    "These two stay on this device.",
+                "The department's server holds the model key; this device only needs the server's address, its public key " +
+                    "and the import passphrase. These stay on this device.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -177,12 +177,12 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
             FormField(f.serverKey, { v -> viewModel.edit { it.copy(serverKey = v) } }, "Server public (anon) key", capitalization = KeyboardCapitalization.None)
             FormField(
                 f.importSecret, { v -> viewModel.edit { it.copy(importSecret = v) } }, "Import passphrase",
-                supporting = "Only if the server was set up with one", capitalization = KeyboardCapitalization.None,
+                supporting = "The passphrase set on the server (IMPORT_SHARED_SECRET)", capitalization = KeyboardCapitalization.None,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedButton(
                     onClick = viewModel::check,
-                    enabled = !state.checking && f.serverUrl.isNotBlank() && f.serverKey.isNotBlank(),
+                    enabled = !state.checking && f.serverUrl.isNotBlank() && f.serverKey.isNotBlank() && f.importSecret.isNotBlank(),
                     modifier = Modifier.heightIn(min = TouchTarget),
                 ) { Text(if (state.checking) "Checking…" else "Check connection") }
                 state.checkResult?.let { (ok, message) ->

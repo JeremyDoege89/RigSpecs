@@ -117,25 +117,30 @@ Deno.test("settings come from the environment with safe defaults", () => {
 });
 
 Deno.test("the HTTP handler: method, passphrase, ping and missing key", async () => {
-  const post = (body: unknown, headers: Record<string, string> = {}) =>
+  const post = (body: unknown, headers: Record<string, string> = { "x-rigspecs-secret": "hose" }) =>
     new Request("http://localhost/extract-specs", { method: "POST", body: JSON.stringify(body), headers });
   const fake: CallModel = () => Promise.resolve(message(JSON.stringify(modelRows)));
   const env = (vars: Record<string, string>) => (k: string) => vars[k];
-
-  assertEquals((await handle(new Request("http://localhost/", { method: "GET" }), env({}), fake)).status, 405);
-
   const locked = env({ IMPORT_SHARED_SECRET: "hose" });
-  assertEquals((await handle(post({ ping: true }), locked, fake)).status, 401);
-  const unlocked = await handle(post({ ping: true }, { "x-rigspecs-secret": "hose" }), locked, fake);
+
+  assertEquals((await handle(new Request("http://localhost/", { method: "GET" }), locked, fake)).status, 405);
+
+  // No passphrase configured: the function refuses everything rather than running open.
+  const open = await handle(post({ ping: true }), env({}), fake);
+  assertEquals([open.status, (await open.json()).code], [500, "server_config"]);
+
+  assertEquals((await handle(post({ ping: true }, {}), locked, fake)).status, 401);
+  assertEquals((await handle(post({ ping: true }, { "x-rigspecs-secret": "hosE" }), locked, fake)).status, 401);
+  const unlocked = await handle(post({ ping: true }), locked, fake);
   assertEquals(await unlocked.json(), { ok: true, message: "Ready: claude-sonnet-5-5, dense pages claude-opus-5-5" });
 
-  assertEquals((await (await handle(post({ ping: true }), env({}), null)).json()).ok, false);
-  const noKey = await handle(post(pdfRequest), env({}), null);
+  assertEquals((await (await handle(post({ ping: true }), locked, null)).json()).ok, false);
+  const noKey = await handle(post(pdfRequest), locked, null);
   assertEquals([noKey.status, (await noKey.json()).code], [500, "server_config"]);
 
-  const bad = await handle(post({ vehicle, document: { kind: "pdf", pages: [] } }), env({}), fake);
+  const bad = await handle(post({ vehicle, document: { kind: "pdf", pages: [] } }), locked, fake);
   assertEquals(bad.status, 400);
-  const good = await handle(post(pdfRequest), env({}), fake);
+  const good = await handle(post(pdfRequest), locked, fake);
   assertEquals(good.status, 200);
   assert(((await good.json()).rows as unknown[]).length === 3);
 });

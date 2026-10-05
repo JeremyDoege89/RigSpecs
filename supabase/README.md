@@ -21,12 +21,13 @@ data: it holds nothing between calls.
    supabase secrets set ANTHROPIC_API_KEY=<model API key> IMPORT_SHARED_SECRET=<a passphrase you choose>
    ```
 
-   `IMPORT_SHARED_SECRET` is optional but recommended: without it, anyone holding the project's
-   public key (which ships inside the app) could run imports on the department's account.
-5. Deploy: `supabase functions deploy extract-specs`.
+   `IMPORT_SHARED_SECRET` is required: the function refuses every request until it's set. It is
+   the function's lock, because the function is deployed without Supabase's JWT check (new
+   projects' public "publishable" keys aren't JWTs, and the gateway only verifies JWTs).
+5. Deploy (no Docker needed): `supabase functions deploy extract-specs --no-verify-jwt --use-api`.
 6. On each device that imports: Settings → Assisted import. Enter `https://<ref>.supabase.co`,
-   the project's **anon** key (Supabase dashboard → Project Settings → API) and the passphrase,
-   then tap **Check connection**. It should say `Ready`.
+   the project's public key (**publishable** or **anon**, under Project Settings → API keys) and the
+   passphrase, then tap **Check connection**. It should say `Ready`.
 
 ## Optional settings
 
@@ -51,7 +52,7 @@ mechanic kept versus fixed (the app records `edited` on every confirmed row).
 - On a safety decline the API retries on its recommended fallback model (`fallbacks: "default"`);
   a request that's still declined comes back as "declined" and the app stops that import.
 - Errors tell the app what to do: 429 and 503 are retried, `server_config` (a wrong key or
-  passphrase) and `refused` are not.
+  passphrase, or none set) and `refused` are not.
 
 ## Develop and test
 

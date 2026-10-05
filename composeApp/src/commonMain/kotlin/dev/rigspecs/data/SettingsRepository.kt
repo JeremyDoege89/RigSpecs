@@ -16,7 +16,7 @@ data class Settings(
     /** Device-only until sign-in exists: where the extraction function lives. */
     val serverUrl: String,
     val serverKey: String,
-    /** Optional extra check the function can require, so a leaked project key alone can't run imports. */
+    /** The extraction function's passphrase: its lock, since the project's public key ships in the app. */
     val importSecret: String,
 ) {
     /** The extraction endpoint, or null until a server is configured. */
@@ -24,7 +24,7 @@ data class Settings(
         get() = serverUrl.trim().trimEnd('/').takeIf { it.startsWith("https://") || it.startsWith("http://") }
             ?.let { "$it/functions/v1/extract-specs" }
 
-    val importReady: Boolean get() = importEnabled && extractUrl != null && serverKey.isNotBlank()
+    val importReady: Boolean get() = importEnabled && extractUrl != null && serverKey.isNotBlank() && importSecret.isNotBlank()
 }
 
 /**
