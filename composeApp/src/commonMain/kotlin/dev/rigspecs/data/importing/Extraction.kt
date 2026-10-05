@@ -29,7 +29,13 @@ data class ExtractVehicle(
     val engine: String = "",
     val chassis: String = "",
     val body: String = "",
+    /** The profile's existing fields, so extracted rows reuse their names and fill template blanks. */
+    val fields: List<KnownField> = emptyList(),
 )
+
+/** A field the profile already has: a spec's component and property, or a part's component. */
+@Serializable
+data class KnownField(val kind: String, val component: String, val name: String = "")
 
 /** Pages for one extraction call: part of a PDF, or photos. */
 sealed interface ExtractInput {

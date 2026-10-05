@@ -14,7 +14,10 @@ import {
 } from "./extract.ts";
 import { handle } from "./index.ts";
 
-const vehicle = { unit: "Engine 2", type: "Engine", year: 2019, make: "Pierce", model: "Enforcer", engine: "Cummins X12", chassis: "Pierce", body: "" };
+const vehicle = {
+  unit: "Engine 2", type: "Engine", year: 2019, make: "Pierce", model: "Enforcer", engine: "Cummins X12", chassis: "Pierce", body: "",
+  fields: [{ kind: "spec", component: "Lug nuts", name: "Torque" }, { kind: "part", component: "Oil filter", name: "ignored" }, { kind: "x", component: "?" }],
+};
 const pdfRequest = { vehicle, document: { kind: "pdf", pages: [212, 213], data: "JVBERi0xLjQK" }, dense: false };
 const settings = settingsFromEnv(() => undefined);
 
@@ -58,7 +61,13 @@ Deno.test("the pages come first, then what they are", () => {
   assertMatch(text.text, /sheet 1 is page 212, sheet 2 is page 213/);
   assertMatch(text.text, /Engine 2 \(Engine\), 2019 Pierce Enforcer/);
   assertMatch(text.text, /Engine: Cummins X12/);
+  // The profile's field names are offered so rows reuse them; junk entries are dropped.
+  assertMatch(text.text, /use exactly that component and name/);
+  assertMatch(text.text, /Specs:\n- Lug nuts · Torque\nParts:\n- Oil filter/);
+  assertEquals(parseRequest(pdfRequest).vehicle.fields.length, 2);
 
+  const bare = buildContent(parseRequest({ vehicle: { ...vehicle, fields: undefined }, document: pdfRequest.document }));
+  assert(!(bare[1] as Anthropic.Beta.BetaTextBlockParam).text.includes("already has these fields"));
   const photo = buildContent(parseRequest({ vehicle, document: { kind: "images", images: [{ page: 1, mediaType: "image/jpeg", data: "/9j/" }] } }));
   assertEquals(photo[0].type, "image");
   assertMatch((photo[1] as Anthropic.Beta.BetaTextBlockParam).text, /pictures are 1 page of the document: sheet 1 is page 1/);

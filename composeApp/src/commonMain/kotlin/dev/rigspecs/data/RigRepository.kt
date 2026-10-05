@@ -2,6 +2,7 @@ package dev.rigspecs.data
 
 import androidx.room.immediateTransaction
 import androidx.room.useWriterConnection
+import dev.rigspecs.data.importing.KnownField
 import dev.rigspecs.domain.CandidateRow
 import dev.rigspecs.domain.DefaultTemplates
 import dev.rigspecs.domain.EntityType
@@ -23,6 +24,7 @@ import dev.rigspecs.domain.displayValue
 import dev.rigspecs.domain.isSafetyCritical
 import dev.rigspecs.domain.loggedFields
 import dev.rigspecs.domain.matchImportRow
+import dev.rigspecs.domain.matchKey
 import dev.rigspecs.domain.stampPartSave
 import dev.rigspecs.domain.stampSpecSave
 import dev.rigspecs.domain.toImportRow
@@ -61,6 +63,12 @@ class RigRepository(
     suspend fun part(id: String) = parts.get(id)
     suspend fun document(id: String) = docs.get(id)
     suspend fun documents(vehicleId: String) = docs.listForVehicle(vehicleId)
+
+    /** The profile's field names, for extraction to reuse: spec component and property, part component. */
+    suspend fun fieldNames(vehicleId: String): List<KnownField> =
+        (specs.listForVehicle(vehicleId).map { KnownField("spec", it.component, it.name) } +
+            parts.listForVehicle(vehicleId).map { KnownField("part", it.component) })
+            .distinctBy { Triple(it.kind, matchKey(it.component), matchKey(it.name)) }
 
     /** The stored vPIC JSON for [vin] from any rig, used as the VIN-decode cache. */
     suspend fun storedDecode(vin: String): String? = vehicles.storedDecode(vin)

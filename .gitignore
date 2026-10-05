@@ -9,3 +9,6 @@ local.properties
 keystore.properties
 *.jks
 *.keystore
+
+# Supabase CLI cache
+supabase/.temp/

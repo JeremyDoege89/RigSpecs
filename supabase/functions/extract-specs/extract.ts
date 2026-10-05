@@ -14,6 +14,12 @@ export const PART_SYSTEMS = [
   "ENGINE", "TRANSMISSION", "BRAKES", "SUSPENSION", "ELECTRICAL", "HVAC", "PUMP", "AERIAL", "BODY", "CHASSIS", "OTHER",
 ] as const;
 
+export interface KnownField {
+  kind: "spec" | "part";
+  component: string;
+  name: string;
+}
+
 export interface Vehicle {
   unit: string;
   type: string;
@@ -23,7 +29,11 @@ export interface Vehicle {
   engine: string;
   chassis: string;
   body: string;
+  /** Fields the rig's profile already has; rows reuse their names so they fill template blanks. */
+  fields: KnownField[];
 }
+
+const MAX_FIELDS = 200;
 
 export type DocumentInput =
   | { kind: "pdf"; pages: number[]; data: string }
@@ -98,7 +108,7 @@ Record only what is printed on the attached pages:
 
 How to fill a row:
 - kind "spec" is a value: a capacity, fluid type or grade, torque, pressure, electrical rating or tire size. component is the thing it belongs to (Engine oil, Lug nuts, Front axle, Fire pump); name is the property (Capacity, Type, Torque, Pressure); value is the number or grade; unit is the unit as printed (qt, gal, L, ft-lb, N·m, psi). category is FLUID for fluid types and grades, CAPACITY for amounts, TORQUE, ELECTRICAL, TIRE, or OTHER. Leave system, oem_number and cross_references empty and quantity 0.
-- kind "part" is a part number: component is what the part is (Oil filter, Fuel filter, primary); oem_number is the vehicle or component manufacturer's number listed for this vehicle; cross_references are other brands' equivalents printed on the page, each with its brand ("NAPA 1792"); quantity is how many the vehicle uses, 0 when not stated; system is where it belongs. Leave category, name, value and unit empty.
+- kind "part" is a part number: component is what the part is (Oil filter, Fuel filter, primary); oem_number is the number listed for this vehicle, exactly as printed but without the brand name (LF9009, not Fleetguard LF9009), and the brand goes in notes; cross_references are other brands' equivalents printed on the page, each with its brand ("NAPA 1792"); quantity is how many the vehicle uses, 0 when not stated; system is where it belongs. Leave category, name, value and unit empty.
 - evidence is the shortest exact excerpt from the page that shows the value, at most about 15 words.
 - sheet is which attached page the row came from: 1 for the first attached page, 2 for the second, and so on. It is not the page number printed on the paper.`;
 
@@ -110,9 +120,15 @@ export function parseRequest(body: unknown): ExtractRequest {
   const b = body as Record<string, unknown>;
   const v = (b.vehicle ?? {}) as Record<string, unknown>;
   const text = (x: unknown) => (typeof x === "string" ? x.slice(0, 120) : "");
+  const fields: KnownField[] = (Array.isArray(v.fields) ? v.fields : []).slice(0, MAX_FIELDS).flatMap((raw) => {
+    const f = raw as Record<string, unknown>;
+    const kind = f.kind === "part" ? "part" : f.kind === "spec" ? "spec" : null;
+    const component = text(f.component).slice(0, 80).trim();
+    return kind && component ? [{ kind, component, name: kind === "spec" ? text(f.name).slice(0, 80).trim() : "" }] : [];
+  });
   const vehicle: Vehicle = {
     unit: text(v.unit), type: text(v.type), year: typeof v.year === "number" ? v.year : null,
-    make: text(v.make), model: text(v.model), engine: text(v.engine), chassis: text(v.chassis), body: text(v.body),
+    make: text(v.make), model: text(v.model), engine: text(v.engine), chassis: text(v.chassis), body: text(v.body), fields,
   };
   const d = b.document as Record<string, unknown> | undefined;
   if (!d) throw new RequestError("No document in the request.");
@@ -170,9 +186,16 @@ export function buildContent(req: ExtractRequest): Anthropic.Beta.BetaContentBlo
   const blocks: Anthropic.Beta.BetaContentBlockParam[] = req.document.kind === "pdf"
     ? [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: req.document.data } }]
     : req.document.images.map((i) => ({ type: "image", source: { type: "base64", media_type: i.mediaType, data: i.data } }));
+  const specFields = v.fields.filter((f) => f.kind === "spec").map((f) => `- ${f.component} · ${f.name}`);
+  const partFields = v.fields.filter((f) => f.kind === "part").map((f) => `- ${f.component}`);
+  const known = specFields.length + partFields.length === 0 ? "" : [
+    "\n\nThe rig's profile already has these fields. When a value on these pages is one of them, use exactly that component and name, and put details such as sizes, models or conditions in notes:",
+    ...(specFields.length ? ["Specs:", ...specFields] : []),
+    ...(partFields.length ? ["Parts:", ...partFields] : []),
+  ].join("\n");
   blocks.push({
     type: "text",
-    text: `${facts}\n\nThe attached ${req.document.kind === "pdf" ? "PDF holds" : "pictures are"} ${pages.length} ${
+    text: `${facts}${known}\n\nThe attached ${req.document.kind === "pdf" ? "PDF holds" : "pictures are"} ${pages.length} ${
       pages.length === 1 ? "page" : "pages"
     } of the document: ${order}.\n\nRecord every specification and part number printed on these pages.`,
   });

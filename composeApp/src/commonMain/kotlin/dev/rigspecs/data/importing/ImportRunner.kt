@@ -76,6 +76,7 @@ class ImportRunner(
             val context = ExtractVehicle(
                 unit = vehicle.unitNumber, type = vehicle.type.label, year = vehicle.year, make = vehicle.make,
                 model = vehicle.model, engine = vehicle.engine, chassis = vehicle.chassisMake, body = vehicle.bodyBuilder,
+                fields = rigs.fieldNames(vehicle.id).take(MAX_FIELDS),
             )
             var done = job.pagesDone.coerceIn(0, wanted.size)
             var batchSize = if (job.dense) DENSE_BATCH else BATCH
@@ -139,6 +140,9 @@ class ImportRunner(
         const val BATCH = 3
         const val DENSE_BATCH = 2
         const val MAX_PDF_BYTES = 8 * 1024 * 1024
+
+        /** The server reads at most this many profile field names; templates have about 40. */
+        const val MAX_FIELDS = 200
 
         /** Long side for page pictures; larger images are scaled down by the model service anyway. */
         const val IMAGE_EDGE = 1568
