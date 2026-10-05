@@ -71,6 +71,7 @@ fun FormField(
     keyboardType: KeyboardType = KeyboardType.Text,
     capitalization: KeyboardCapitalization = KeyboardCapitalization.Sentences,
     enabled: Boolean = true,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     OutlinedTextField(
         value = value,
@@ -82,6 +83,7 @@ fun FormField(
         singleLine = singleLine,
         minLines = if (singleLine) 1 else 3,
         enabled = enabled,
+        trailingIcon = trailing,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType, capitalization = capitalization),
     )
 }

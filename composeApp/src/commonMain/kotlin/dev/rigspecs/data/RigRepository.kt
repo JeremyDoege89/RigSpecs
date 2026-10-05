@@ -2,10 +2,16 @@ package dev.rigspecs.data
 
 import androidx.room.immediateTransaction
 import androidx.room.useWriterConnection
+import dev.rigspecs.domain.DefaultTemplates
 import dev.rigspecs.domain.EntityType
 import dev.rigspecs.domain.FieldChange
 import dev.rigspecs.domain.Ids
+import dev.rigspecs.domain.PartSystem
 import dev.rigspecs.domain.Session
+import dev.rigspecs.domain.SpecCategory
+import dev.rigspecs.domain.TemplateItem
+import dev.rigspecs.domain.TemplateJson
+import dev.rigspecs.domain.VehicleType
 import dev.rigspecs.domain.diffFields
 import dev.rigspecs.domain.loggedFields
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +31,7 @@ class RigRepository(
     private val parts = db.partDao()
     private val docs = db.documentDao()
     private val changeLog = db.changeLogDao()
+    private val templates = db.templateDao()
 
     fun observeVehicles(): Flow<List<VehicleEntity>> = vehicles.observeAll()
     fun observeVehicle(id: String): Flow<VehicleEntity?> = vehicles.observe(id)
@@ -39,8 +46,37 @@ class RigRepository(
     suspend fun document(id: String) = docs.get(id)
     suspend fun documents(vehicleId: String) = docs.listForVehicle(vehicleId)
 
-    /** A blank id means a new row. Returns the saved row's id. */
-    suspend fun saveVehicle(draft: VehicleEntity): String = write {
+    /** The stored vPIC JSON for [vin] from any rig, used as the VIN-decode cache. */
+    suspend fun storedDecode(vin: String): String? = vehicles.storedDecode(vin)
+
+    /** The department's template for [type], seeding the built-in one the first time. */
+    suspend fun templateItems(type: VehicleType): List<TemplateItem> {
+        val id = DefaultTemplates.id(type)
+        templates.get(id)?.takeIf { !it.deleted }?.let { return TemplateJson.decode(it.itemsJson) }
+        val items = DefaultTemplates.forType(type)
+        write {
+            if (templates.get(id) == null) {
+                templates.upsert(
+                    TemplateEntity(
+                        id = id,
+                        departmentId = session.departmentId,
+                        vehicleType = type,
+                        name = DefaultTemplates.name(type),
+                        itemsJson = TemplateJson.encode(items),
+                        updatedAt = ids.now(),
+                        updatedBy = session.userId,
+                    ),
+                )
+            }
+        }
+        return items
+    }
+
+    /**
+     * A blank id means a new row. Returns the saved row's id. A new rig also gets a blank spec or
+     * part for each of [template]'s items, in the same transaction.
+     */
+    suspend fun saveVehicle(draft: VehicleEntity, template: List<TemplateItem> = emptyList()): String = write {
         val old = draft.id.takeIf { it.isNotEmpty() }?.let { vehicles.get(it) }
         val row = draft.copy(
             id = old?.id ?: ids.newId(),
@@ -51,7 +87,32 @@ class RigRepository(
         )
         vehicles.upsert(row)
         log(EntityType.VEHICLE, row.id, diffFields(old?.loggedFields(), row.loggedFields()))
+        if (old == null) template.forEachIndexed { i, item -> insertTemplateItem(row, item, i) }
         row.id
+    }
+
+    private suspend fun insertTemplateItem(v: VehicleEntity, item: TemplateItem, sortOrder: Int) {
+        when (item.kind) {
+            TemplateItem.Kind.SPEC -> {
+                val row = SpecItemEntity(
+                    id = ids.newId(), departmentId = v.departmentId, vehicleId = v.id,
+                    category = item.category ?: SpecCategory.OTHER, component = item.component, name = item.name,
+                    value = "", unit = item.unit, safetyCritical = item.safetyCritical, sortOrder = sortOrder,
+                    updatedAt = ids.now(), updatedBy = session.userId,
+                )
+                specs.upsert(row)
+                log(EntityType.SPEC, row.id, diffFields(null, row.loggedFields()))
+            }
+            TemplateItem.Kind.PART -> {
+                val row = PartEntity(
+                    id = ids.newId(), departmentId = v.departmentId, vehicleId = v.id,
+                    system = item.system ?: PartSystem.OTHER, component = item.component, sortOrder = sortOrder,
+                    updatedAt = ids.now(), updatedBy = session.userId,
+                )
+                parts.upsert(row)
+                log(EntityType.PART, row.id, diffFields(null, row.loggedFields()))
+            }
+        }
     }
 
     suspend fun saveSpec(draft: SpecItemEntity): String = write {

@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -15,7 +18,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,7 +35,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -35,6 +46,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.rigspecs.domain.VehicleType
 import dev.rigspecs.ui.common.ChoiceField
 import dev.rigspecs.ui.common.FormField
+import dev.rigspecs.ui.scan.rememberVinScanner
+import dev.rigspecs.ui.theme.TouchTarget
 import dev.rigspecs.ui.theme.WarnColor
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -45,6 +58,7 @@ fun VehicleEditScreen(
     onSaved: (id: String, isNew: Boolean) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val scan = rememberVinScanner(viewModel::onScanned)
     LaunchedEffect(state.savedId) { state.savedId?.let { onSaved(it, state.isNew) } }
 
     Scaffold(
@@ -64,6 +78,30 @@ fun VehicleEditScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            Section("VIN")
+            FormField(
+                f.vin, viewModel::setVin, "VIN",
+                error = state.vinError,
+                supporting = if (scan != null) "Scan the door-jamb barcode or type it" else null,
+                capitalization = KeyboardCapitalization.Characters,
+                modifier = Modifier.onFocusChanged { if (!it.isFocused) viewModel.refreshWarnings() },
+                trailing = scan?.let {
+                    {
+                        IconButton(onClick = it, modifier = Modifier.size(TouchTarget)) {
+                            Icon(Icons.Filled.QrCodeScanner, contentDescription = "Scan VIN barcode")
+                        }
+                    }
+                },
+            )
+            state.warnings.forEach { Text(it, color = WarnColor, style = MaterialTheme.typography.bodyMedium) }
+            DecodeCard(
+                state.decode,
+                canDecode = f.vin.isNotBlank(),
+                onDecode = viewModel::decode,
+                onApply = viewModel::applyDecode,
+                onDismiss = viewModel::dismissDecode,
+            )
+
             Section("Identity")
             FormField(
                 f.unitNumber, { v -> viewModel.edit { it.copy(unitNumber = v) } }, "Unit number *",
@@ -75,9 +113,26 @@ fun VehicleEditScreen(
                 selected = f.type,
                 options = VehicleType.entries,
                 optionLabel = { it.label },
-                onSelect = { t -> viewModel.edit { it.copy(type = t) } },
+                onSelect = viewModel::setType,
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (state.isNew && state.templateSize > 0) {
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = TouchTarget)
+                        .toggleable(state.applyTemplate, role = Role.Switch, onValueChange = viewModel::setApplyTemplate),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Start with the ${f.type.label.lowercase()} template", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "${state.templateSize} blank fields: oil, coolant, lug nuts, filters, wipers…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = state.applyTemplate, onCheckedChange = null)
+                }
+            }
             FormField(
                 f.station, { v -> viewModel.edit { it.copy(station = v) } }, "Station",
                 capitalization = KeyboardCapitalization.Words,
@@ -92,12 +147,6 @@ fun VehicleEditScreen(
             }
 
             Section("Vehicle")
-            FormField(
-                f.vin, { v -> viewModel.edit { it.copy(vin = v) } }, "VIN",
-                capitalization = KeyboardCapitalization.Characters,
-                modifier = Modifier.onFocusChanged { if (!it.isFocused) viewModel.refreshWarnings() },
-            )
-            state.warnings.forEach { Text(it, color = WarnColor, style = MaterialTheme.typography.bodyMedium) }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FormField(
                     f.year, { v -> viewModel.edit { it.copy(year = v.filter(Char::isDigit).take(4)) } }, "Year",
@@ -153,4 +202,73 @@ private fun Section(title: String) {
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
     )
+}
+
+@Composable
+private fun DecodeCard(
+    decode: DecodeUi,
+    canDecode: Boolean,
+    onDecode: () -> Unit,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    when (decode) {
+        DecodeUi.Idle -> OutlinedButton(
+            onClick = onDecode,
+            enabled = canDecode,
+            modifier = Modifier.fillMaxWidth().heightIn(min = TouchTarget),
+        ) { Text("Decode VIN") }
+        DecodeUi.Working -> Row(
+            Modifier.fillMaxWidth().heightIn(min = TouchTarget),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
+            Text("Asking NHTSA…", style = MaterialTheme.typography.bodyLarge)
+        }
+        is DecodeUi.Failed -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(decode.message, color = WarnColor, style = MaterialTheme.typography.bodyLarge)
+            OutlinedButton(onClick = onDecode, modifier = Modifier.fillMaxWidth().heightIn(min = TouchTarget)) { Text("Try again") }
+        }
+        is DecodeUi.Applied -> Text(
+            if (decode.filled.isEmpty()) "Decoded. Every field it covers was already filled in."
+            else "Decoded. Filled in ${decode.filled.joinToString(", ")}. Check them before saving.",
+            color = MaterialTheme.colorScheme.secondary,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+        is DecodeUi.Ready -> Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val s = decode.summary
+                Text("NHTSA says", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    listOfNotNull(s.year?.toString(), s.make, s.model).joinToString(" "),
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                s.engine?.let { Text("Engine: $it", style = MaterialTheme.typography.bodyLarge) }
+                s.bodyClass?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                if (decode.checkDigitWarning) {
+                    Text(
+                        "The VIN's check digit doesn't add up. Make sure it matches the sticker.",
+                        color = WarnColor,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    Button(
+                        onClick = onApply,
+                        enabled = !decode.fill.isEmpty,
+                        modifier = Modifier.weight(1f).heightIn(min = TouchTarget),
+                    ) { Text(if (decode.fill.isEmpty) "Nothing to fill" else "Use these") }
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).heightIn(min = TouchTarget)) { Text("Dismiss") }
+                }
+            }
+        }
+    }
 }

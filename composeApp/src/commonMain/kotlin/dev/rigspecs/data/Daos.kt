@@ -20,6 +20,10 @@ interface VehicleDao {
 
     @Upsert
     suspend fun upsert(vehicle: VehicleEntity)
+
+    /** A stored vPIC decode for [vin] from any rig, deleted or not: the VIN-decode cache. */
+    @Query("SELECT vinDecodeJson FROM vehicle WHERE vin = :vin AND vinDecodeJson != '' ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun storedDecode(vin: String): String?
 }
 
 @Dao
@@ -75,8 +79,8 @@ interface DocumentDao {
 
 @Dao
 interface TemplateDao {
-    @Query("SELECT * FROM template WHERE vehicleType = :vehicleType AND deleted = 0 ORDER BY name")
-    suspend fun forType(vehicleType: String): List<TemplateEntity>
+    @Query("SELECT * FROM template WHERE id = :id")
+    suspend fun get(id: String): TemplateEntity?
 
     @Upsert
     suspend fun upsert(template: TemplateEntity)

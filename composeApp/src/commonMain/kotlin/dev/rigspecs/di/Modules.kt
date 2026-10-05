@@ -1,6 +1,10 @@
 package dev.rigspecs.di
 
 import dev.rigspecs.data.RigRepository
+import dev.rigspecs.data.vin.KtorVpicRemote
+import dev.rigspecs.data.vin.VinDecoder
+import dev.rigspecs.data.vin.VpicRemote
+import dev.rigspecs.data.vin.vpicHttpClient
 import dev.rigspecs.domain.Ids
 import dev.rigspecs.domain.LocalSession
 import dev.rigspecs.domain.Session
@@ -20,9 +24,11 @@ val sharedModule: Module = module {
     single<Session> { LocalSession }
     single<Ids> { SystemIds }
     single { RigRepository(get(), get(), get()) }
+    single<VpicRemote> { KtorVpicRemote(vpicHttpClient()) }
+    single { VinDecoder(get(), storedDecode = get<RigRepository>()::storedDecode) }
 
     viewModel { FleetViewModel(get(), get()) }
-    viewModel { p -> VehicleEditViewModel(p.getOrNull<String>(), get()) }
+    viewModel { p -> VehicleEditViewModel(p.getOrNull<String>(), get(), get()) }
     viewModel { p -> ProfileViewModel(p.get(), get(), get()) }
     viewModel { p ->
         ItemEditViewModel(

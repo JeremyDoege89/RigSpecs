@@ -1,5 +1,6 @@
 package dev.rigspecs.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -31,6 +32,9 @@ data class VehicleEntity(
     val station: String = "",
     val photoPath: String = "",
     val notes: String = "",
+    /** vPIC DecodeVinValues Results[0] for [vin], verbatim; empty when never decoded. Added in v2. */
+    @ColumnInfo(defaultValue = "")
+    val vinDecodeJson: String = "",
     val updatedAt: Long,
     val updatedBy: String,
     val deleted: Boolean = false,

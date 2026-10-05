@@ -50,23 +50,35 @@ kotlin {
             implementation(libs.coroutines.core)
             implementation(libs.serialization.json)
             implementation(libs.datetime)
+            implementation(libs.ktor.client.core)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.coroutines.test)
+            implementation(libs.ktor.client.mock)
         }
         androidMain.dependencies {
             implementation(libs.koin.android)
+            implementation(libs.ktor.client.okhttp)
+            implementation(libs.activity.compose)
+            // VIN barcode scanning. The bundled ML Kit model works with no signal and no Play services.
+            implementation(libs.camera.camera2)
+            implementation(libs.camera.lifecycle)
+            implementation(libs.camera.view)
+            implementation(libs.camera.mlkit.vision)
+            implementation(libs.mlkit.barcode)
         }
         val desktopMain by getting {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation(libs.coroutines.swing)
+                implementation(libs.ktor.client.okhttp)
             }
         }
         val desktopTest by getting {
             dependencies {
                 implementation(libs.compose.ui.test)
+                implementation(libs.room.testing)
                 implementation(compose.desktop.currentOs)
             }
         }

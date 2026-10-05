@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.rigspecs.data.DocumentEntity
@@ -56,6 +57,7 @@ import dev.rigspecs.domain.ProfileTab
 import dev.rigspecs.domain.copyText
 import dev.rigspecs.domain.description
 import dev.rigspecs.domain.displayValue
+import dev.rigspecs.domain.vinDecodeDetails
 import dev.rigspecs.ui.common.ConfirmDialog
 import dev.rigspecs.ui.common.EmptyState
 import dev.rigspecs.ui.common.LabeledFab
@@ -246,9 +248,28 @@ private fun OverviewTab(state: ProfileState, copy: (String, String) -> Unit, onE
         "Station" to v.station,
     ).filter { it.second.isNotBlank() }
     val specs = state.specsFor(ProfileTab.OVERVIEW)
+    val decodeDetails = remember(v.vinDecodeJson) { vinDecodeDetails(v.vinDecodeJson) }
+    val blanks = state.specs.count { it.value.isBlank() } +
+        state.parts.count { it.oemNumber.isBlank() && it.aftermarketNumbers.isBlank() }
     LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
+        if (blanks > 0 && state.canEdit) {
+            item(key = "blanks") {
+                Text(
+                    "$blanks ${if (blanks == 1) "field is" else "fields are"} still blank. Fill them in from the Fluids, Torque and Parts tabs.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
+        }
         items(details, key = { "d-" + it.first }) { (label, value) ->
             CopyRow(label = label, value = value, onClick = { copy(value, label) })
+        }
+        if (decodeDetails.isNotEmpty()) {
+            item(key = "decode") { SectionLabel("From the VIN decode") }
+            items(decodeDetails, key = { "v-" + it.first }) { (label, value) ->
+                CopyRow(label = label, value = value, onClick = { copy(value, label) })
+            }
         }
         if (v.notes.isNotBlank()) {
             item(key = "notes") {
@@ -276,7 +297,9 @@ private fun LazyListScope.specRows(
     specs.groupBy { it.component.trim() }.forEach { (component, group) ->
         item(key = "c-$component-${group.first().id}") { SectionLabel(component) }
         items(group, key = { it.id }) { spec ->
-            SpecRow(spec, spec.sourceDocId?.let(docs::get), canEdit, onCopy = { copy(spec.displayValue(), spec.name) }, onEdit = { onEdit(spec.id) })
+            // A blank has nothing to copy, so tapping it goes straight to filling it in.
+            val tap = if (spec.value.isBlank() && canEdit) ({ onEdit(spec.id) }) else ({ copy(spec.displayValue(), spec.name) })
+            SpecRow(spec, spec.sourceDocId?.let(docs::get), canEdit, onCopy = tap, onEdit = { onEdit(spec.id) })
         }
     }
 }
@@ -295,7 +318,15 @@ private fun SpecRow(spec: SpecItemEntity, source: DocumentEntity?, canEdit: Bool
                     Icon(Icons.Filled.Warning, contentDescription = "Safety-critical", tint = WarnColor, modifier = Modifier.size(18.dp))
                 }
             }
-            Text(spec.displayValue(), style = ValueStyle)
+            if (spec.value.isBlank()) {
+                Text(
+                    if (spec.unit.isBlank()) "Not filled in" else "Not filled in (${spec.unit})",
+                    style = MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(spec.displayValue(), style = ValueStyle)
+            }
             if (spec.notes.isNotBlank()) Text(spec.notes, style = MaterialTheme.typography.bodyMedium)
             if (spec.safetyCritical) {
                 Text("Verify against the manual before use", style = MaterialTheme.typography.bodyMedium, color = WarnColor)
@@ -304,7 +335,9 @@ private fun SpecRow(spec: SpecItemEntity, source: DocumentEntity?, canEdit: Bool
                 Text("Source: ${it.citation()}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
             }
         }
-        Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        if (spec.value.isNotBlank()) {
+            Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        }
         if (canEdit) {
             IconButton(onClick = onEdit, modifier = Modifier.size(TouchTarget)) {
                 Icon(Icons.Filled.Edit, contentDescription = "Edit ${spec.component} ${spec.name}")
@@ -330,7 +363,7 @@ private fun PartsTab(state: ProfileState, copy: (String, String) -> Unit, onEdit
                     part,
                     part.sourceDocId?.let(state.documentsById::get),
                     state.canEdit,
-                    onCopy = { copy(part.copyText(), part.component) },
+                    onCopy = if (part.copyText().isBlank() && state.canEdit) ({ onEditPart(part.id) }) else ({ copy(part.copyText(), part.component) }),
                     onEdit = { onEditPart(part.id) },
                 )
             }
@@ -349,6 +382,12 @@ private fun PartRow(part: PartEntity, source: DocumentEntity?, canEdit: Boolean,
             Text(part.component + qty, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (part.oemNumber.isNotBlank()) {
                 Text(part.oemNumber, style = ValueStyle.copy(fontFamily = FontFamily.Monospace))
+            } else if (part.aftermarketNumbers.isBlank()) {
+                Text(
+                    "No part number yet",
+                    style = MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             part.aftermarketNumbers.lines().map { it.trim() }.filter { it.isNotEmpty() }.forEach {
                 Text(it, style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace))
@@ -359,7 +398,9 @@ private fun PartRow(part: PartEntity, source: DocumentEntity?, canEdit: Boolean,
                 Text("Source: ${it.citation()}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
             }
         }
-        Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        if (part.copyText().isNotBlank()) {
+            Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        }
         if (canEdit) {
             IconButton(onClick = onEdit, modifier = Modifier.size(TouchTarget)) {
                 Icon(Icons.Filled.Edit, contentDescription = "Edit ${part.component}")

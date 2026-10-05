@@ -1,5 +1,6 @@
 package dev.rigspecs.data
 
+import androidx.room.AutoMigration
 import androidx.room.ConstructedBy
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -16,7 +17,11 @@ import kotlinx.coroutines.CoroutineDispatcher
         TemplateEntity::class,
         ChangeLogEntity::class,
     ],
-    version = 1,
+    version = 2,
+    autoMigrations = [
+        // v2: vehicle.vinDecodeJson
+        AutoMigration(from = 1, to = 2),
+    ],
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {

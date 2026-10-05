@@ -1,6 +1,7 @@
 package dev.rigspecs.data
 
 import androidx.room.Room
+import dev.rigspecs.domain.DefaultTemplates
 import dev.rigspecs.domain.DocumentKind
 import dev.rigspecs.domain.Ids
 import dev.rigspecs.domain.PartSystem
@@ -132,5 +133,37 @@ class RigRepositoryTest {
         val gone = repo.saveVehicle(newVehicle("Old Car"))
         repo.deleteVehicle(gone)
         assertEquals(listOf("Engine 2", "medic 3"), repo.observeVehicles().first().map { it.unitNumber })
+    }
+
+    @Test
+    fun newRigGetsTemplateRowsAndTheTemplateIsSeededOnce() = runTest {
+        val items = repo.templateItems(VehicleType.LADDER)
+        assertEquals(items, repo.templateItems(VehicleType.LADDER))
+        val tpl = db.templateDao().get(DefaultTemplates.id(VehicleType.LADDER))!!
+        assertEquals("dept-1", tpl.departmentId)
+
+        val vid = repo.saveVehicle(newVehicle("Ladder 1").copy(type = VehicleType.LADDER), items)
+        val specs = repo.observeSpecs(vid).first()
+        val parts = repo.observeParts(vid).first()
+        assertEquals(items.size, specs.size + parts.size)
+        assertTrue(specs.all { it.value.isEmpty() && it.dirty && it.departmentId == "dept-1" })
+        val lug = specs.first { it.component == "Lug nuts" && it.name == "Torque" }
+        assertTrue(lug.safetyCritical)
+        assertEquals(SpecCategory.TORQUE, lug.category)
+        // Template order is kept, so the profile groups read like the template.
+        assertEquals("Engine oil", specs.first().component)
+
+        // Saving the rig again never re-applies the template.
+        repo.saveVehicle(repo.vehicle(vid)!!.copy(station = "Station 3"), items)
+        assertEquals(specs.size, repo.observeSpecs(vid).first().size)
+    }
+
+    @Test
+    fun storedDecodeIsTheVinCache() = runTest {
+        repo.saveVehicle(newVehicle("Medic 3").copy(vin = "1FDXE4FN8LDC00000", vinDecodeJson = """{"Make":"FORD"}"""))
+        repo.saveVehicle(newVehicle("Medic 4").copy(vin = "1FDXE4FN8LDC00001"))
+        assertEquals("""{"Make":"FORD"}""", repo.storedDecode("1FDXE4FN8LDC00000"))
+        assertNull(repo.storedDecode("1FDXE4FN8LDC00001"))
+        assertNull(repo.storedDecode("nope"))
     }
 }

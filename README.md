@@ -28,5 +28,15 @@ The UI-flow test saves screenshots to `composeApp/build/screenshots/`.
 Milestone 1 (local skeleton): Room schema for the whole data model, fleet list with search and
 type/station filters, add/edit/delete a rig, profile tabs (Overview, Fluids, Torque, Parts, Docs),
 one form for specs and parts with a source-document picker, safety-critical specs that require a
-source, tap-to-copy, and a change log written on every edit. Sign-in, sync and file attachments
-arrive in milestone 4; until then everything belongs to one local department.
+source, tap-to-copy, and a change log written on every edit.
+
+Milestone 2 (VIN and templates): NHTSA vPIC decode with a confirm card that fills only blank fields
+(custom apparatus such as Pierce, which vPIC returns without a make, falls back to the
+manufacturer), the decode stored on the rig and reused as a cache, VIN barcode scanning on Android
+(CameraX + bundled ML Kit, works without signal), and rig-type templates that pre-create the usual
+blank specs and parts. Tapping a blank goes straight to filling it in.
+
+Sign-in, sync and file attachments arrive in milestone 4; until then everything belongs to one
+local department.
+
+`VPIC_LIVE=1 ./gradlew :composeApp:desktopTest --tests '*LiveVpicTest*'` checks the real NHTSA service.

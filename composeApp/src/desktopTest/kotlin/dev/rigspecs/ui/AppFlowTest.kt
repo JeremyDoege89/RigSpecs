@@ -6,6 +6,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.filter
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
@@ -16,12 +17,15 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.room.Room
 import dev.rigspecs.App
 import dev.rigspecs.data.AppDatabase
 import dev.rigspecs.data.configure
+import dev.rigspecs.data.vin.VpicFixtures
+import dev.rigspecs.data.vin.VpicRemote
 import dev.rigspecs.di.sharedModule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -36,30 +40,24 @@ import javax.imageio.ImageIO
 import kotlin.test.Test
 
 /**
- * Drives the milestone 1 flow through the real App() against an in-memory database, and saves
- * screenshots to build/screenshots for a visual check.
+ * Drives the main flows through the real App() against an in-memory database and a fake vPIC,
+ * and saves screenshots to build/screenshots for a visual check.
  */
 @OptIn(ExperimentalTestApi::class, ExperimentalCoroutinesApi::class)
 class AppFlowTest {
     private val shots = File("build/screenshots").apply { mkdirs() }
 
     @Test
-    fun addRigSpecPartAndFilterFleet() {
+    fun decodeTemplateFillAndFilter() {
         val db = Room.inMemoryDatabaseBuilder<AppDatabase>().configure(Dispatchers.IO)
-        startKoin { modules(sharedModule, module { single { db } }) }
+        val fakeVpic = VpicRemote { vin, _ -> if (vin.startsWith("4EN")) VpicFixtures.EONE else VpicFixtures.NOTHING_DECODED }
+        startKoin {
+            modules(sharedModule, module { single { db } }, module { single<VpicRemote> { fakeVpic } })
+        }
         try {
             // Navigation and lifecycle insist on the main thread, and ViewModels collect on Main. An
             // unconfined test Main satisfies both from the test thread.
             Dispatchers.setMain(UnconfinedTestDispatcher())
-            runFlow()
-        } finally {
-            Dispatchers.resetMain()
-            stopKoin()
-            db.close()
-        }
-    }
-
-    private fun runFlow() {
             runDesktopComposeUiTest(width = 412, height = 900) {
                 setContent { App() }
                 try {
@@ -71,95 +69,108 @@ class AppFlowTest {
                     throw e
                 }
             }
+        } finally {
+            Dispatchers.resetMain()
+            stopKoin()
+            db.close()
+        }
     }
 
     private fun ComposeUiTest.flow() {
-        run {
-                waitForText("No rigs yet")
-                shot("1-fleet-empty")
+        waitForText("No rigs yet")
+        shot("1-fleet-empty")
 
-                // Add a rig by hand.
-                onNodeWithContentDescription("Add rig").performClick()
-                type("Unit number *", "Engine 2")
-                type("Station", "Station 1")
-                type("VIN", "4P1BAAGF5KA012345")
-                type("Year", "2019")
-                type("Make", "Pierce")
-                type("Model", "Enforcer")
-                type("Builder job / serial number", "SO-34567")
-                shot("2-add-rig")
-                clickButton("Add rig")
+        // Add a rig: decode the VIN, confirm, keep the template on.
+        onNodeWithContentDescription("Add rig").performClick()
+        waitForText("Start with the engine template")
+        type("VIN", "4en6aaa85k1000000")
+        onNodeWithText("Decode VIN").performClick()
+        waitForText("NHTSA says")
+        waitForText("2019 E-One")
+        waitForText("Engine: Cummins ISL 8.9L 310 hp")
+        waitForText("check digit")
+        shot("2-decode-card")
+        onNodeWithText("Use these").performClick()
+        waitForText("Filled in year, make, engine, chassis make")
+        type("Unit number *", "Engine 2")
+        type("Station", "Station 1")
+        type("Model", "Typhoon")
+        type("Builder job / serial number", "SO-34567")
+        shot("3-add-rig")
+        clickButton("Add rig")
 
-                // Lands on the new profile.
-                waitForText("VIN ${"4P1BAAGF5KA012345"}")
-                waitForText("SO-34567")
-                shot("3-profile-overview")
+        // Lands on the new profile with the template's blanks and the decode details.
+        waitForText("VIN 4EN6AAA85K1000000")
+        waitForText("fields are still blank")
+        shot("4-profile-overview")
+        onNode(hasScrollAction()).performScrollToNode(hasText("Fire Apparatus"))
+        waitForText("From the VIN decode")
+        shot("4b-profile-decode")
 
-                // A safety-critical torque spec needs a source document.
-                onNodeWithText("Torque").performClick()
-                waitForText("No torque specs yet")
-                onNodeWithContentDescription("Add spec").performClick()
-                type("Component *", "Lug nuts")
-                type("Property *", "Torque")
-                type("Value *", "450")
-                onNodeWithText("ft-lb").performClick()
-                onNodeWithText("Safety-critical").performScrollTo().performClick()
-                clickButton("Save")
-                waitForText("Safety-critical specs need a source document")
-                shot("4-spec-needs-source")
+        // Fill the template's lug-nut torque. It's safety-critical, so it needs a source.
+        onNodeWithText("Torque").performClick()
+        waitForText("Not filled in (ft-lb)")
+        shot("5-torque-blank")
+        onNodeWithContentDescription("Edit Lug nuts Torque").performClick()
+        type("Value *", "450")
+        clickButton("Save")
+        waitForText("Safety-critical specs need a source document")
+        onNode(hasText("Source document *") and hasClickAction()).performScrollTo().performClick()
+        onNodeWithText("Add a document…").performClick()
+        type("Title *", "E-One delivery manual")
+        type("Where in it", "p. 212")
+        // The dialog is its own root, listed after the screen's Save button.
+        onAllNodesWithText("Save").filter(hasClickAction()).onLast().performClick()
+        waitForText("E-One delivery manual, p. 212")
+        clickButton("Save")
+        waitForText("450 ft-lb")
+        waitForText("Source: E-One delivery manual, p. 212")
+        waitForText("Verify against the manual before use")
+        shot("6-profile-torque")
 
-                onNode(hasText("Source document *") and hasClickAction()).performScrollTo().performClick()
-                onNodeWithText("Add a document…").performClick()
-                type("Title *", "Pierce delivery manual")
-                type("Where in it", "p. 212")
-                // The dialog is its own root, listed after the screen's Save button.
-                onAllNodesWithText("Save").filter(hasClickAction()).onLast().performClick()
-                waitForText("Pierce delivery manual, p. 212")
-                clickButton("Save")
+        // Fill the template's oil filter.
+        onNodeWithText("Parts").performClick()
+        waitForText("No part number yet")
+        onNodeWithContentDescription("Edit Oil filter").performScrollTo().performClick()
+        type("OEM part number", "LF9009")
+        type("Cross-references", "NAPA 1792")
+        clickButton("Save")
+        waitForText("LF9009")
+        waitForText("NAPA 1792")
+        shot("7-profile-parts")
 
-                waitForText("450 ft-lb")
-                waitForText("Source: Pierce delivery manual, p. 212")
-                waitForText("Verify against the manual before use")
-                shot("5-profile-torque")
+        onNodeWithText("Docs").performClick()
+        waitForText("Manual · p. 212")
 
-                // A part with an OEM number and a cross-reference.
-                onNodeWithText("Parts").performClick()
-                onNodeWithContentDescription("Add part").performClick()
-                type("Part *", "Oil filter")
-                type("OEM part number", "LF9009")
-                type("Cross-references", "NAPA 1792")
-                clickButton("Save")
-                waitForText("LF9009")
-                waitForText("NAPA 1792")
-                shot("6-profile-parts")
+        // A second rig without a template, typed by hand; the failed decode doesn't block saving.
+        onNodeWithContentDescription("Back").performClick()
+        waitForText("Engine 2")
+        onNodeWithContentDescription("Add rig").performClick()
+        type("VIN", "1FDXE4FN8LDC00000")
+        onNodeWithText("Decode VIN").performClick()
+        waitForText("NHTSA doesn't recognize this VIN")
+        type("Unit number *", "Medic 3")
+        onNode(hasText("Type") and hasClickAction()).performClick()
+        onNodeWithText("Ambulance").performClick()
+        waitForText("Start with the ambulance template")
+        onNodeWithText("Start with the ambulance template").performClick()
+        type("Station", "Station 2")
+        clickButton("Add rig")
+        waitForText("Ambulance")
+        onNodeWithText("Torque").performClick()
+        waitForText("No torque specs yet")
+        onNodeWithContentDescription("Back").performClick()
 
-                // Docs tab lists the document added from the spec form.
-                onNodeWithText("Docs").performClick()
-                waitForText("Manual · p. 212")
+        waitForText("Medic 3")
+        shot("8-fleet-two-rigs")
+        onAllNodesWithText("Ambulance").filter(hasClickAction()).onFirst().performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Engine 2").fetchSemanticsNodes().isEmpty() }
+        onAllNodesWithText("Ambulance").filter(hasClickAction()).onFirst().performClick()
 
-                // Back to the fleet, add a second rig of another type, then filter.
-                onNodeWithContentDescription("Back").performClick()
-                waitForText("Engine 2")
-                onNodeWithContentDescription("Add rig").performClick()
-                type("Unit number *", "Medic 3")
-                onNode(hasText("Type") and hasClickAction()).performClick()
-                onNodeWithText("Ambulance").performClick()
-                type("Station", "Station 2")
-                clickButton("Add rig")
-                waitForText("Ambulance")
-                onNodeWithContentDescription("Back").performClick()
-
-                waitForText("Medic 3")
-                shot("7-fleet-two-rigs")
-                onAllNodesWithText("Ambulance").filter(hasClickAction()).onFirst().performClick()
-                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Engine 2").fetchSemanticsNodes().isEmpty() }
-                onAllNodesWithText("Ambulance").filter(hasClickAction()).onFirst().performClick()
-
-                onNode(hasSetTextAction()).performTextInput("pierce")
-                waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Medic 3").fetchSemanticsNodes().isEmpty() }
-                waitForText("Engine 2")
-                shot("8-fleet-search")
-        }
+        onNode(hasSetTextAction()).performTextInput("e-one")
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Medic 3").fetchSemanticsNodes().isEmpty() }
+        waitForText("Engine 2")
+        shot("9-fleet-search")
     }
 
     private fun ComposeUiTest.waitForText(text: String) {

@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- VIN decode (NHTSA vPIC); everything else works offline. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- VIN barcode scanning, asked for only when Scan is tapped. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
     <application
         android:name=".RigSpecsApplication"
         android:allowBackup="false"
