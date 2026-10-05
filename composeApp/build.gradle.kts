@@ -1,9 +1,10 @@
+import com.android.build.api.dsl.KotlinMultiplatformAndroidLibraryTarget
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.android.kmp.library)
+    alias(libs.plugins.android.kmp.library) apply false
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlin.serialization)
@@ -11,12 +12,21 @@ plugins {
     alias(libs.plugins.room)
 }
 
+/**
+ * `-PdesktopOnly=true` leaves Android out entirely, so the desktop app and its Windows installer
+ * build on a computer without the Android SDK. Set the same flag for every task in that build.
+ */
+val desktopOnly = providers.gradleProperty("desktopOnly").orNull == "true"
+if (!desktopOnly) apply(plugin = "com.android.kotlin.multiplatform.library")
+
 kotlin {
-    android {
-        namespace = "dev.rigspecs.shared"
-        compileSdk = 37
-        minSdk = 26
-        compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+    if (!desktopOnly) {
+        extensions.configure<KotlinMultiplatformAndroidLibraryTarget>("android") {
+            namespace = "dev.rigspecs.shared"
+            compileSdk = 37
+            minSdk = 26
+            compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+        }
     }
     jvm("desktop") {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
@@ -57,7 +67,7 @@ kotlin {
             implementation(libs.coroutines.test)
             implementation(libs.ktor.client.mock)
         }
-        androidMain.dependencies {
+        if (!desktopOnly) getByName("androidMain").dependencies {
             implementation(libs.koin.android)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.activity.compose)
@@ -93,7 +103,7 @@ kotlin {
 }
 
 dependencies {
-    add("kspAndroid", libs.room.compiler)
+    if (!desktopOnly) add("kspAndroid", libs.room.compiler)
     add("kspDesktop", libs.room.compiler)
 }
 
@@ -114,7 +124,25 @@ compose.desktop {
             // Msi builds only on Windows; Deb lets this Linux host smoke-test packaging.
             targetFormats(TargetFormat.Msi, TargetFormat.Deb)
             packageName = "RigSpecs"
-            packageVersion = "0.1.0"
+            packageVersion = "0.3.0"
+            description = "Specs, torque values, fluids and part numbers for every rig"
+            vendor = "Rig Specs"
+            // On top of Compose's defaults (java.desktop, java.logging, jdk.crypto.ec): what
+            // `suggestRuntimeModules` found, plus modules libraries can load by reflection.
+            modules("java.instrument", "java.management", "jdk.unsupported", "java.xml", "java.naming", "java.sql")
+            windows {
+                menuGroup = "Rig Specs"
+                shortcut = true
+                dirChooser = true
+                // No admin rights needed, which matters on locked-down department PCs.
+                perUserInstall = true
+                // Never change this: it is how a new installer finds and replaces the old version.
+                upgradeUuid = "6f3d2b1e-8a4c-4f7e-9d2a-5b8c1e0f7a34"
+                iconFile.set(project.file("icons/rigspecs.ico"))
+            }
+            linux {
+                iconFile.set(project.file("icons/rigspecs.png"))
+            }
         }
     }
 }

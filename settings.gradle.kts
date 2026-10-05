@@ -18,4 +18,5 @@ rootProject.name = "RigSpecs"
 // Shared UI, data and logic for Android, desktop (Windows) and, later, iOS.
 include(":composeApp")
 // Thin Android shell: AGP 9 keeps com.android.application out of KMP modules.
-include(":androidApp")
+// Left out of desktop-only builds (-PdesktopOnly=true), which need no Android SDK.
+if (providers.gradleProperty("desktopOnly").orNull != "true") include(":androidApp")
