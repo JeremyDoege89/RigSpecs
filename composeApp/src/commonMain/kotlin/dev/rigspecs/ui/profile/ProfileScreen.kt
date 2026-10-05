@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.DropdownMenu
@@ -45,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
@@ -53,7 +55,10 @@ import dev.rigspecs.data.DocumentEntity
 import dev.rigspecs.data.PartEntity
 import dev.rigspecs.data.SpecItemEntity
 import dev.rigspecs.data.VehicleEntity
+import dev.rigspecs.domain.DocumentKind
+import dev.rigspecs.domain.ImportJobStatus
 import dev.rigspecs.domain.ProfileTab
+import dev.rigspecs.domain.VerificationStatus
 import dev.rigspecs.domain.copyText
 import dev.rigspecs.domain.description
 import dev.rigspecs.domain.displayValue
@@ -63,6 +68,7 @@ import dev.rigspecs.ui.common.EmptyState
 import dev.rigspecs.ui.common.LabeledFab
 import dev.rigspecs.ui.common.icon
 import dev.rigspecs.ui.common.rememberCopier
+import dev.rigspecs.ui.importing.rememberDocumentPicker
 import dev.rigspecs.ui.theme.TouchTarget
 import dev.rigspecs.ui.theme.ValueStyle
 import dev.rigspecs.ui.theme.WarnColor
@@ -77,6 +83,8 @@ fun ProfileScreen(
     onEditSpec: (String) -> Unit,
     onAddPart: () -> Unit,
     onEditPart: (String) -> Unit,
+    onReview: () -> Unit,
+    onImport: (documentId: String) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -91,6 +99,32 @@ fun ProfileScreen(
             }
         }
     }
+    val uriHandler = LocalUriHandler.current
+    val say: (String) -> Unit = { text ->
+        scope.launch {
+            snackbar.currentSnackbarData?.dismiss()
+            snackbar.showSnackbar(text)
+        }
+    }
+    // The identifier goes on the clipboard either way: most portals take it in a search box.
+    val openPortal: (PortalLink) -> Unit = { link ->
+        if (link.identifier.isBlank()) {
+            say("Add the ${link.portal.identifierLabel} first (Edit rig), then look it up.")
+        } else {
+            copier.copy(link.identifier)
+            val opened = runCatching { uriHandler.openUri(link.url) }.isSuccess
+            say(
+                if (opened) "Copied ${link.portal.identifierLabel} ${link.identifier}. Paste it into ${link.portal.label}'s search."
+                else "No browser could open ${link.portal.label}.",
+            )
+        }
+    }
+    val picker = rememberDocumentPicker(
+        onPicked = { file -> viewModel.addFileDocument(file) { docId -> onImport(docId) } },
+        onError = say,
+    )
+    var choosingDocument by remember { mutableStateOf(false) }
+    var docActions by remember { mutableStateOf<DocumentEntity?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var docDialog by remember { mutableStateOf<DocumentEntity?>(null) }
@@ -130,7 +164,7 @@ fun ProfileScreen(
             if (state.canEdit) {
                 val (label, action) = when (state.tab) {
                     ProfileTab.PARTS -> "Add part" to onAddPart
-                    ProfileTab.DOCS -> "Add document" to { docDialog = null; docDialogOpen = true }
+                    ProfileTab.DOCS -> "Add document" to { choosingDocument = true }
                     else -> "Add spec" to { onAddSpec(state.tab) }
                 }
                 LabeledFab(label, Icons.Filled.Add, action)
@@ -139,6 +173,7 @@ fun ProfileScreen(
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Header(vehicle, onCopyVin = { copy(vehicle.vin, "VIN") })
+            if (state.canEdit && (state.toReview > 0 || state.activeJobs.isNotEmpty())) ReviewBanner(state, onReview)
             PrimaryTabRow(selectedTabIndex = state.tab.ordinal) {
                 ProfileTab.entries.forEach { tab ->
                     // The content overload skips the text overload's 16dp side padding, so all five
@@ -155,7 +190,7 @@ fun ProfileScreen(
                 }
             }
             when (state.tab) {
-                ProfileTab.OVERVIEW -> OverviewTab(state, copy, onEditSpec)
+                ProfileTab.OVERVIEW -> OverviewTab(state, copy, onEditSpec, openPortal)
                 ProfileTab.FLUIDS, ProfileTab.TORQUE -> {
                     val specs = state.specsFor(state.tab)
                     if (specs.isEmpty()) {
@@ -170,11 +205,32 @@ fun ProfileScreen(
                     }
                 }
                 ProfileTab.PARTS -> PartsTab(state, copy, onEditPart)
-                ProfileTab.DOCS -> DocsTab(state) { docDialog = it; docDialogOpen = true }
+                ProfileTab.DOCS -> DocsTab(state) { docActions = it }
             }
         }
     }
 
+    if (choosingDocument) {
+        AddDocumentDialog(
+            canTakePhoto = picker.canTakePhoto,
+            onPickFile = { choosingDocument = false; picker.pickFile() },
+            onTakePhoto = { choosingDocument = false; picker.takePhoto() },
+            onNameOnly = { choosingDocument = false; docDialog = null; docDialogOpen = true },
+            onDismiss = { choosingDocument = false },
+        )
+    }
+    docActions?.let { doc ->
+        DocumentActionsDialog(
+            document = doc,
+            job = state.latestJobs[doc.id],
+            canEdit = state.canEdit,
+            onImport = { docActions = null; onImport(doc.id) },
+            onReview = { docActions = null; onReview() },
+            onEdit = { docActions = null; docDialog = doc; docDialogOpen = true },
+            onDelete = { docActions = null; docToDelete = doc },
+            onDismiss = { docActions = null },
+        )
+    }
     if (confirmDelete) {
         ConfirmDialog(
             title = "Delete ${vehicle.unitNumber}?",
@@ -234,7 +290,12 @@ private fun Header(vehicle: VehicleEntity, onCopyVin: () -> Unit) {
 }
 
 @Composable
-private fun OverviewTab(state: ProfileState, copy: (String, String) -> Unit, onEditSpec: (String) -> Unit) {
+private fun OverviewTab(
+    state: ProfileState,
+    copy: (String, String) -> Unit,
+    onEditSpec: (String) -> Unit,
+    onPortal: (PortalLink) -> Unit,
+) {
     val v = state.vehicle ?: return
     val details = listOf(
         "VIN" to v.vin,
@@ -252,6 +313,9 @@ private fun OverviewTab(state: ProfileState, copy: (String, String) -> Unit, onE
     val blanks = state.specs.count { it.value.isBlank() } +
         state.parts.count { it.oemNumber.isBlank() && it.aftermarketNumbers.isBlank() }
     LazyColumn(contentPadding = PaddingValues(bottom = 96.dp)) {
+        if (state.portals.isNotEmpty()) {
+            item(key = "portals") { PortalRow(state.portals, onPortal) }
+        }
         if (blanks > 0 && state.canEdit) {
             item(key = "blanks") {
                 Text(
@@ -327,12 +391,13 @@ private fun SpecRow(spec: SpecItemEntity, source: DocumentEntity?, canEdit: Bool
             } else {
                 Text(spec.displayValue(), style = ValueStyle)
             }
+            if (spec.status == VerificationStatus.UNVERIFIED) UnverifiedBadge(spec.sourceKind)
             if (spec.notes.isNotBlank()) Text(spec.notes, style = MaterialTheme.typography.bodyMedium)
             if (spec.safetyCritical) {
                 Text("Verify against the manual before use", style = MaterialTheme.typography.bodyMedium, color = WarnColor)
             }
             source?.let {
-                Text("Source: ${it.citation()}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+                Text("Source: ${it.citation(spec.pageHint)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
             }
         }
         if (spec.value.isNotBlank()) {
@@ -392,10 +457,11 @@ private fun PartRow(part: PartEntity, source: DocumentEntity?, canEdit: Boolean,
             part.aftermarketNumbers.lines().map { it.trim() }.filter { it.isNotEmpty() }.forEach {
                 Text(it, style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace))
             }
+            if (part.status == VerificationStatus.UNVERIFIED) UnverifiedBadge(part.sourceKind)
             if (part.supplier.isNotBlank()) Text("Supplier: ${part.supplier}", style = MaterialTheme.typography.bodyMedium)
             if (part.notes.isNotBlank()) Text(part.notes, style = MaterialTheme.typography.bodyMedium)
             source?.let {
-                Text("Source: ${it.citation()}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
+                Text("Source: ${it.citation(part.pageHint)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
             }
         }
         if (part.copyText().isNotBlank()) {
@@ -417,7 +483,7 @@ private fun DocsTab(state: ProfileState, onOpen: (DocumentEntity) -> Unit) {
     if (state.documents.isEmpty()) {
         EmptyState(
             "No documents yet",
-            "List the manuals and build sheets here so specs and parts can point to the page they came from.",
+            "Add the delivery manual, parts lists and build sheets. Specs can be imported from them, and every spec can point to the page it came from.",
         )
         return
     }
@@ -429,12 +495,24 @@ private fun DocsTab(state: ProfileState, onOpen: (DocumentEntity) -> Unit) {
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Filled.Description, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                Icon(
+                    if (doc.kind == DocumentKind.PHOTO) Icons.Filled.Image else Icons.Filled.Description,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                )
                 Spacer(Modifier.width(16.dp))
                 Column(Modifier.weight(1f)) {
                     Text(doc.title, style = MaterialTheme.typography.bodyLarge)
-                    val sub = listOf(doc.kind.label, doc.pageHint).filter { it.isNotBlank() }.joinToString(" · ")
+                    val sub = listOf(doc.kind.label, doc.pageHint, if (doc.localPath.isBlank()) "no file on this device" else "")
+                        .filter { it.isNotBlank() }.joinToString(" · ")
                     Text(sub, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    state.latestJobs[doc.id]?.let { job ->
+                        Text(
+                            importStatusLine(job, job.id in state.runningJobs),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (job.status == ImportJobStatus.FAILED) WarnColor else MaterialTheme.colorScheme.secondary,
+                        )
+                    }
                 }
             }
             HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)

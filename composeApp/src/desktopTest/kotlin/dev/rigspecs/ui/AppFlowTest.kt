@@ -6,7 +6,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.filter
 import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
@@ -24,9 +24,17 @@ import androidx.room.Room
 import dev.rigspecs.App
 import dev.rigspecs.data.AppDatabase
 import dev.rigspecs.data.configure
+import dev.rigspecs.data.importing.DesktopDocumentFiles
+import dev.rigspecs.data.importing.DesktopDocumentPages
+import dev.rigspecs.data.importing.DocumentFiles
+import dev.rigspecs.data.importing.DocumentPages
 import dev.rigspecs.data.vin.VpicFixtures
 import dev.rigspecs.data.vin.VpicRemote
 import dev.rigspecs.di.sharedModule
+import dev.rigspecs.ui.UiTestKit.clickButton
+import dev.rigspecs.ui.UiTestKit.shot
+import dev.rigspecs.ui.UiTestKit.type
+import dev.rigspecs.ui.UiTestKit.waitForText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -45,14 +53,21 @@ import kotlin.test.Test
  */
 @OptIn(ExperimentalTestApi::class, ExperimentalCoroutinesApi::class)
 class AppFlowTest {
-    private val shots = File("build/screenshots").apply { mkdirs() }
-
     @Test
     fun decodeTemplateFillAndFilter() {
         val db = Room.inMemoryDatabaseBuilder<AppDatabase>().configure(Dispatchers.IO)
         val fakeVpic = VpicRemote { vin, _ -> if (vin.startsWith("4EN")) VpicFixtures.EONE else VpicFixtures.NOTHING_DECODED }
+        val docsDir = java.nio.file.Files.createTempDirectory("rigspecs-ui-docs").toFile()
         startKoin {
-            modules(sharedModule, module { single { db } }, module { single<VpicRemote> { fakeVpic } })
+            modules(
+                sharedModule,
+                module {
+                    single { db }
+                    single<DocumentPages> { DesktopDocumentPages() }
+                    single<DocumentFiles> { DesktopDocumentFiles(docsDir) }
+                },
+                module { single<VpicRemote> { fakeVpic } },
+            )
         }
         try {
             // Navigation and lifecycle insist on the main thread, and ViewModels collect on Main. An
@@ -83,8 +98,8 @@ class AppFlowTest {
         // Add a rig: decode the VIN, confirm, keep the template on.
         onNodeWithContentDescription("Add rig").performClick()
         waitForText("Start with the engine template")
+        // A complete VIN decodes by itself.
         type("VIN", "4en6aaa85k1000000")
-        onNodeWithText("Decode VIN").performClick()
         waitForText("NHTSA says")
         waitForText("2019 E-One")
         waitForText("Engine: Cummins ISL 8.9L 310 hp")
@@ -102,9 +117,15 @@ class AppFlowTest {
         // Lands on the new profile with the template's blanks and the decode details.
         waitForText("VIN 4EN6AAA85K1000000")
         waitForText("fields are still blank")
+        // The Cummins engine from the decode brings up the QuickServe button; no ESN yet, so it asks for one.
+        waitForText("Look up in")
+        onNodeWithText("Cummins QuickServe").performClick()
+        waitForText("Add the ESN first")
         shot("4-profile-overview")
-        onNode(hasScrollAction()).performScrollToNode(hasText("Fire Apparatus"))
-        waitForText("From the VIN decode")
+        // Scrolling to a node fails if it doesn't exist, so these double as checks.
+        onNode(hasScrollToIndexAction()).performScrollToNode(hasText("From the VIN decode"))
+        onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Body class", substring = true))
+        waitForText("Fire Apparatus")
         shot("4b-profile-decode")
 
         // Fill the template's lug-nut torque. It's safety-critical, so it needs a source.
@@ -121,7 +142,9 @@ class AppFlowTest {
         type("Where in it", "p. 212")
         // The dialog is its own root, listed after the screen's Save button.
         onAllNodesWithText("Save").filter(hasClickAction()).onLast().performClick()
-        waitForText("E-One delivery manual, p. 212")
+        waitForText("E-One delivery manual")
+        // The row's own page is optional; the citation falls back to the document's.
+        waitForText("Where it's printed")
         clickButton("Save")
         waitForText("450 ft-lb")
         waitForText("Source: E-One delivery manual, p. 212")
@@ -147,7 +170,6 @@ class AppFlowTest {
         waitForText("Engine 2")
         onNodeWithContentDescription("Add rig").performClick()
         type("VIN", "1FDXE4FN8LDC00000")
-        onNodeWithText("Decode VIN").performClick()
         waitForText("NHTSA doesn't recognize this VIN")
         type("Unit number *", "Medic 3")
         onNode(hasText("Type") and hasClickAction()).performClick()
@@ -171,25 +193,5 @@ class AppFlowTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Medic 3").fetchSemanticsNodes().isEmpty() }
         waitForText("Engine 2")
         shot("9-fleet-search")
-    }
-
-    private fun ComposeUiTest.waitForText(text: String) {
-        waitUntil(timeoutMillis = 5_000) { onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
-    }
-
-    private fun ComposeUiTest.type(label: String, text: String) {
-        val field = onNode(hasText(label) and hasSetTextAction())
-        runCatching { field.performScrollTo() } // dialogs don't scroll
-        field.performTextInput(text)
-    }
-
-    /** The full-width button at the bottom of a form, not a same-named title or FAB. */
-    private fun ComposeUiTest.clickButton(label: String) {
-        onAllNodesWithText(label).filter(hasClickAction()).onFirst().performScrollTo().performClick()
-    }
-
-    private fun ComposeUiTest.shot(name: String) {
-        waitForIdle()
-        ImageIO.write(onRoot().captureToImage().toAwtImage(), "png", File(shots, "$name.png"))
     }
 }

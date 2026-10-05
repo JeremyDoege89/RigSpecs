@@ -1,5 +1,6 @@
 package dev.rigspecs.ui.item
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -22,9 +24,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,13 +47,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.rigspecs.data.DocumentEntity
 import dev.rigspecs.domain.CommonUnits
 import dev.rigspecs.domain.PartSystem
+import dev.rigspecs.domain.SourceKind
 import dev.rigspecs.domain.SpecCategory
+import dev.rigspecs.domain.VerificationStatus
+import dev.rigspecs.domain.isAllowedPortalUrl
 import dev.rigspecs.domain.formatTimestamp
 import dev.rigspecs.ui.common.ChoiceField
 import dev.rigspecs.ui.common.ConfirmDialog
 import dev.rigspecs.ui.common.FormField
 import dev.rigspecs.ui.profile.DocumentDialog
-import dev.rigspecs.ui.profile.citation
 import dev.rigspecs.ui.theme.TouchTarget
 import dev.rigspecs.ui.theme.WarnColor
 
@@ -88,11 +95,15 @@ fun ItemEditScreen(viewModel: ItemEditViewModel, onClose: () -> Unit) {
     ) { padding ->
         if (state.loading) return@Scaffold
         val f = state.form
+        val unverified = state.status == VerificationStatus.UNVERIFIED
         Column(
             Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            if (unverified) {
+                UnverifiedNotice(state.sourceKind, state.sourceUrl)
+            }
             if (isSpec) {
                 ChoiceField("Category", f.category, SpecCategory.entries, { it.label }, { c -> viewModel.edit { it.copy(category = c) } }, Modifier.fillMaxWidth())
                 FormField(
@@ -119,13 +130,13 @@ fun ItemEditScreen(viewModel: ItemEditViewModel, onClose: () -> Unit) {
                 }
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = TouchTarget)
-                        .toggleable(f.safetyCritical, role = Role.Switch) { on -> viewModel.edit { it.copy(safetyCritical = on) } },
+                        .toggleable(f.safetyCritical, role = Role.Switch, onValueChange = viewModel::setSafetyCritical),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text("Safety-critical", style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            "Brakes, wheels, aerial. Shows a verify-against-the-manual warning and needs a source.",
+                            "Brakes, wheels, aerial, pump. Shows a verify-against-the-manual warning and needs a source.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -170,7 +181,7 @@ fun ItemEditScreen(viewModel: ItemEditViewModel, onClose: () -> Unit) {
                     when (it) {
                         SourceChoice.None -> "None"
                         SourceChoice.AddNew -> "Add a document…"
-                        is SourceChoice.Doc -> it.doc.citation()
+                        is SourceChoice.Doc -> it.doc.title
                     }
                 },
                 onSelect = { choice ->
@@ -184,23 +195,48 @@ fun ItemEditScreen(viewModel: ItemEditViewModel, onClose: () -> Unit) {
                 supporting = "The manual or build sheet this came from",
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (f.sourceDocId != null) {
+                FormField(f.pageHint, { v -> viewModel.edit { it.copy(pageHint = v) } }, "Page", supporting = "Where it's printed: p. 212, Section 4")
+            }
             if (isSpec && f.safetyCritical) {
                 Text("Verify against the manual before saving.", color = WarnColor, style = MaterialTheme.typography.bodyMedium)
+            }
+            state.verifiedAt?.takeIf { !unverified }?.let { at ->
+                Text(
+                    "Checked by ${state.verifiedBy} on ${formatTimestamp(at)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
             state.lastChangedAt?.let { at ->
                 Text(
                     "Last changed ${formatTimestamp(at)} by ${state.lastChangedBy}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
-            Button(
-                onClick = viewModel::save,
-                enabled = !state.saving,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                contentPadding = PaddingValues(vertical = 16.dp),
-            ) { Text("Save") }
+            if (unverified) {
+                Button(
+                    onClick = { viewModel.save(confirm = true) },
+                    enabled = !state.saving,
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    contentPadding = PaddingValues(vertical = 16.dp),
+                ) { Text("Confirm: I checked it") }
+                OutlinedButton(
+                    onClick = { viewModel.save(confirm = false) },
+                    enabled = !state.saving,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    contentPadding = PaddingValues(vertical = 16.dp),
+                ) { Text("Save without confirming") }
+            } else {
+                Button(
+                    onClick = { viewModel.save() },
+                    enabled = !state.saving,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    contentPadding = PaddingValues(vertical = 16.dp),
+                ) { Text("Save") }
+            }
         }
     }
 
@@ -226,5 +262,23 @@ fun ItemEditScreen(viewModel: ItemEditViewModel, onClose: () -> Unit) {
             onDelete = null,
             onDismiss = { addDocument = false },
         )
+    }
+}
+
+@Composable
+private fun UnverifiedNotice(source: SourceKind, url: String) {
+    val uri = LocalUriHandler.current
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 8.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(12.dp)).padding(12.dp),
+    ) {
+        Text("Unverified · from ${source.label}", color = WarnColor, style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Nobody has checked this against the manual yet. Confirm it once you have.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (isAllowedPortalUrl(url)) {
+            TextButton(onClick = { runCatching { uri.openUri(url) } }, contentPadding = PaddingValues(0.dp)) { Text("Open the source") }
+        }
     }
 }

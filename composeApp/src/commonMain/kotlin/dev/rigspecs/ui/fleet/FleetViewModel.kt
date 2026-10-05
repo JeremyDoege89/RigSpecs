@@ -25,12 +25,14 @@ data class FleetState(
     val stations: List<String> = emptyList(),
     val filter: FleetFilter = FleetFilter(),
     val canEdit: Boolean = false,
+    /** Rows waiting for a person per rig: unverified values plus imported rows. */
+    val toReview: Map<String, Int> = emptyMap(),
 )
 
 class FleetViewModel(repository: RigRepository, session: Session) : ViewModel() {
     private val filter = MutableStateFlow(FleetFilter())
 
-    val state: StateFlow<FleetState> = combine(repository.observeVehicles(), filter) { all, f ->
+    val state: StateFlow<FleetState> = combine(repository.observeVehicles(), filter, repository.observeReviewCounts()) { all, f, counts ->
         val sorted = all.sortedWith(compareBy(naturalOrder) { it.unitNumber })
         FleetState(
             loading = false,
@@ -40,6 +42,7 @@ class FleetViewModel(repository: RigRepository, session: Session) : ViewModel() 
             stations = all.stations(),
             filter = f,
             canEdit = session.canEdit,
+            toReview = counts.filter { it.total > 0 }.associate { it.vehicleId to it.total },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FleetState(canEdit = session.canEdit))
 

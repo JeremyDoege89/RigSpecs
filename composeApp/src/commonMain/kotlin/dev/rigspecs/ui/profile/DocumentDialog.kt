@@ -64,5 +64,8 @@ fun DocumentDialog(
     )
 }
 
-/** "Pierce delivery manual, p. 212". */
-fun DocumentEntity.citation(): String = if (pageHint.isBlank()) title else "$title, ${pageHint.trim()}"
+/** "Pierce delivery manual, p. 212": the row's own page when it has one, else the document's. */
+fun DocumentEntity.citation(page: String = ""): String {
+    val where = page.trim().ifEmpty { pageHint.trim() }
+    return if (where.isEmpty()) title else "$title, $where"
+}

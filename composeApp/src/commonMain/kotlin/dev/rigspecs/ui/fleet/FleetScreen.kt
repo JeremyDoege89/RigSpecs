@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -42,16 +43,25 @@ import dev.rigspecs.ui.common.EmptyState
 import dev.rigspecs.ui.common.LabeledFab
 import dev.rigspecs.ui.common.icon
 import dev.rigspecs.ui.theme.TouchTarget
+import dev.rigspecs.ui.theme.WarnColor
 
 @Composable
 fun FleetScreen(
     viewModel: FleetViewModel,
     onOpenVehicle: (String) -> Unit,
     onAddVehicle: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Fleet") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Fleet") },
+                actions = {
+                    IconButton(onClick = onOpenSettings) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
+                },
+            )
+        },
         floatingActionButton = {
             if (state.canEdit) {
                 LabeledFab("Add rig", Icons.Filled.Add, onAddVehicle)
@@ -117,7 +127,7 @@ fun FleetScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(state.vehicles, key = { it.id }) { vehicle ->
-                        VehicleCard(vehicle, onClick = { onOpenVehicle(vehicle.id) })
+                        VehicleCard(vehicle, toReview = state.toReview[vehicle.id] ?: 0, onClick = { onOpenVehicle(vehicle.id) })
                     }
                 }
             }
@@ -126,7 +136,7 @@ fun FleetScreen(
 }
 
 @Composable
-private fun VehicleCard(vehicle: VehicleEntity, onClick: () -> Unit) {
+private fun VehicleCard(vehicle: VehicleEntity, toReview: Int, onClick: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().heightIn(min = TouchTarget + 16.dp).clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
@@ -153,6 +163,9 @@ private fun VehicleCard(vehicle: VehicleEntity, onClick: () -> Unit) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (toReview > 0) {
+                    Text("$toReview to review", style = MaterialTheme.typography.labelLarge, color = WarnColor)
+                }
             }
             if (vehicle.station.isNotBlank()) {
                 Spacer(Modifier.width(12.dp))

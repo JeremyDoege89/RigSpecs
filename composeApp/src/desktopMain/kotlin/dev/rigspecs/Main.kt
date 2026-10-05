@@ -6,13 +6,23 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import dev.rigspecs.data.AppDatabase
 import dev.rigspecs.data.buildDatabase
+import dev.rigspecs.data.importing.DesktopDocumentFiles
+import dev.rigspecs.data.importing.DesktopDocumentPages
+import dev.rigspecs.data.importing.DocumentFiles
+import dev.rigspecs.data.importing.DocumentPages
 import dev.rigspecs.di.sharedModule
 import org.koin.core.context.startKoin
 import org.koin.dsl.module
 
+val desktopModule = module {
+    single<AppDatabase> { buildDatabase() }
+    single<DocumentPages> { DesktopDocumentPages() }
+    single<DocumentFiles> { DesktopDocumentFiles() }
+}
+
 fun main() {
     startKoin {
-        modules(sharedModule, module { single<AppDatabase> { buildDatabase() } })
+        modules(sharedModule, desktopModule)
     }
     application {
         Window(

@@ -9,7 +9,10 @@ import dev.rigspecs.data.SpecItemEntity
 import dev.rigspecs.domain.DocumentKind
 import dev.rigspecs.domain.FormErrors
 import dev.rigspecs.domain.PartSystem
+import dev.rigspecs.domain.SourceKind
 import dev.rigspecs.domain.SpecCategory
+import dev.rigspecs.domain.VerificationStatus
+import dev.rigspecs.domain.isSafetyCritical
 import dev.rigspecs.domain.parseOptionalInt
 import dev.rigspecs.domain.validatePart
 import dev.rigspecs.domain.validateSpec
@@ -36,6 +39,8 @@ data class ItemForm(
     val qty: String = "",
     val notes: String = "",
     val sourceDocId: String? = null,
+    /** Where in the source document: "p. 212". */
+    val pageHint: String = "",
     val safetyCritical: Boolean = false,
 )
 
@@ -48,6 +53,11 @@ data class ItemEditState(
     val errors: FormErrors = emptyMap(),
     val lastChangedAt: Long? = null,
     val lastChangedBy: String? = null,
+    val status: VerificationStatus = VerificationStatus.VERIFIED,
+    val sourceKind: SourceKind = SourceKind.MANUAL,
+    val sourceUrl: String = "",
+    val verifiedBy: String = "",
+    val verifiedAt: Long? = null,
     val saving: Boolean = false,
     /** Saved or deleted: the screen closes. */
     val done: Boolean = false,
@@ -80,19 +90,38 @@ class ItemEditViewModel(
             if (itemId != null) when (kind) {
                 ItemKind.SPEC -> repository.spec(itemId)?.let { s ->
                     originalSpec = s
-                    _state.update { it.copy(form = s.toForm(), lastChangedAt = s.updatedAt, lastChangedBy = s.updatedBy) }
+                    _state.update {
+                        it.copy(
+                            form = s.toForm(), lastChangedAt = s.updatedAt, lastChangedBy = s.updatedBy, status = s.status,
+                            sourceKind = s.sourceKind, sourceUrl = s.sourceUrl, verifiedBy = s.verifiedBy, verifiedAt = s.verifiedAt,
+                        )
+                    }
                 }
                 ItemKind.PART -> repository.part(itemId)?.let { p ->
                     originalPart = p
-                    _state.update { it.copy(form = p.toForm(), lastChangedAt = p.updatedAt, lastChangedBy = p.updatedBy) }
+                    _state.update {
+                        it.copy(
+                            form = p.toForm(), lastChangedAt = p.updatedAt, lastChangedBy = p.updatedBy, status = p.status,
+                            sourceKind = p.sourceKind, sourceUrl = p.sourceUrl, verifiedBy = p.verifiedBy, verifiedAt = p.verifiedAt,
+                        )
+                    }
                 }
             }
             _state.update { it.copy(loading = false) }
         }
     }
 
+    /** Until the editor flips the switch, a new spec follows the component's name (brakes, wheels…). */
+    private var safetyTouched = itemId != null
+
+    fun setSafetyCritical(on: Boolean) {
+        safetyTouched = true
+        edit { it.copy(safetyCritical = on) }
+    }
+
     fun edit(change: (ItemForm) -> ItemForm) = _state.update {
-        val form = change(it.form)
+        val changed = change(it.form)
+        val form = if (!safetyTouched && kind == ItemKind.SPEC) changed.copy(safetyCritical = isSafetyCritical(changed.component, changed.name)) else changed
         val stillWrong = it.errors.filterKeys { k -> it.form.field(k) == form.field(k) }
         it.copy(form = form, errors = stillWrong)
     }
@@ -108,7 +137,8 @@ class ItemEditViewModel(
         edit { it.copy(sourceDocId = id) }
     }
 
-    fun save() {
+    /** [confirm] false is "Save without confirming": an unverified row keeps its badge. */
+    fun save(confirm: Boolean = true) {
         val s = _state.value
         if (s.saving) return
         when (kind) {
@@ -116,7 +146,7 @@ class ItemEditViewModel(
                 val draft = s.form.toSpec(originalSpec, vehicleId)
                 val errors = validateSpec(draft)
                 if (errors.isNotEmpty()) return _state.update { it.copy(errors = errors) }
-                persist { repository.saveSpec(draft) }
+                persist { repository.saveSpec(draft, confirm) }
             }
             ItemKind.PART -> {
                 val qty = parseOptionalInt(s.form.qty)
@@ -124,7 +154,7 @@ class ItemEditViewModel(
                 val errors = validatePart(draft).toMutableMap()
                 if (qty.isFailure) errors["qty"] = "Quantity must be a whole number"
                 if (errors.isNotEmpty()) return _state.update { it.copy(errors = errors) }
-                persist { repository.savePart(draft) }
+                persist { repository.savePart(draft, confirm) }
             }
         }
     }
@@ -150,12 +180,12 @@ class ItemEditViewModel(
 
 private fun SpecItemEntity.toForm() = ItemForm(
     category = category, component = component, name = name, value = value, unit = unit,
-    notes = notes, sourceDocId = sourceDocId, safetyCritical = safetyCritical,
+    notes = notes, sourceDocId = sourceDocId, pageHint = pageHint, safetyCritical = safetyCritical,
 )
 
 private fun PartEntity.toForm() = ItemForm(
     system = system, component = component, oemNumber = oemNumber, aftermarketNumbers = aftermarketNumbers,
-    supplier = supplier, qty = qtyPerVehicle?.toString().orEmpty(), notes = notes, sourceDocId = sourceDocId,
+    supplier = supplier, qty = qtyPerVehicle?.toString().orEmpty(), notes = notes, sourceDocId = sourceDocId, pageHint = pageHint,
 )
 
 private fun ItemForm.toSpec(original: SpecItemEntity?, vehicleId: String): SpecItemEntity {
@@ -166,6 +196,7 @@ private fun ItemForm.toSpec(original: SpecItemEntity?, vehicleId: String): SpecI
     return base.copy(
         category = category, component = component.trim(), name = name.trim(), value = value.trim(),
         unit = unit.trim(), notes = notes.trim(), sourceDocId = sourceDocId, safetyCritical = safetyCritical,
+        pageHint = if (sourceDocId == null) "" else pageHint.trim(),
     )
 }
 
@@ -177,6 +208,7 @@ private fun ItemForm.toPart(original: PartEntity?, vehicleId: String, qty: Int?)
     return base.copy(
         system = system, component = component.trim(), oemNumber = oemNumber.trim(), aftermarketNumbers = crossRefs,
         supplier = supplier.trim(), qtyPerVehicle = qty, notes = notes.trim(), sourceDocId = sourceDocId,
+        pageHint = if (sourceDocId == null) "" else pageHint.trim(),
     )
 }
 

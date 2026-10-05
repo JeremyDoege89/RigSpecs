@@ -12,6 +12,7 @@ Kotlin Multiplatform + Compose Multiplatform, one codebase:
   - `androidMain` / `desktopMain` — database file location, clipboard, desktop `main()`.
   - iOS targets get added here once a Mac is available to build them.
 - `androidApp/` — the thin Android shell (AGP 9 keeps the application plugin out of KMP modules).
+- `supabase/functions/extract-specs/` — the server function for assisted import (Deno).
 
 ## Build and run
 
@@ -36,7 +37,12 @@ manufacturer), the decode stored on the rig and reused as a cache, VIN barcode s
 (CameraX + bundled ML Kit, works without signal), and rig-type templates that pre-create the usual
 blank specs and parts. Tapping a blank goes straight to filling it in.
 
-Sign-in, sync and file attachments arrive in milestone 4; until then everything belongs to one
-local department.
+Data sourcing (on top of milestone 2, see [docs/DATA_SOURCING.md](docs/DATA_SOURCING.md)): every
+spec and part carries a verified/unverified status and its source; parts-portal deep links;
+assisted import of manuals, parts lists and photos into rows an editor reviews; and the
+`supabase/functions/extract-specs` server function that does the extraction
+([supabase/README.md](supabase/README.md)).
+
+Sign-in and sync arrive in milestone 4; until then everything belongs to one local department.
 
 `VPIC_LIVE=1 ./gradlew :composeApp:desktopTest --tests '*LiveVpicTest*'` checks the real NHTSA service.

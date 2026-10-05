@@ -36,6 +36,7 @@ data class VehicleForm(
     val bodyBuilder: String = "",
     val builderJobNumber: String = "",
     val engine: String = "",
+    val engineSerial: String = "",
     val station: String = "",
     val notes: String = "",
 )
@@ -122,12 +123,21 @@ class VehicleEditViewModel(
 
     fun setApplyTemplate(on: Boolean) = _state.update { it.copy(applyTemplate = on) }
 
+    /** The VIN last decoded without being asked, so typing doesn't call NHTSA twice for it. */
+    private var autoDecoded: String? = null
+
     fun setVin(text: String) {
         edit { it.copy(vin = text) }
         _state.update { s ->
             // A decode for a different VIN no longer applies.
             val stale = (s.decode as? DecodeUi.Ready)?.vin?.let { it != VinValidator.normalize(text) } ?: false
             s.copy(vinError = null, decode = if (stale || s.decode is DecodeUi.Failed) DecodeUi.Idle else s.decode)
+        }
+        // Every new rig gets a vPIC lookup as soon as a complete VIN is in; the result still waits for "Use these".
+        val vin = VinValidator.normalize(text)
+        if (_state.value.isNew && vin != autoDecoded && VinValidator.isWellFormed(vin) && _state.value.decode == DecodeUi.Idle) {
+            autoDecoded = vin
+            decode()
         }
     }
 
@@ -139,7 +149,8 @@ class VehicleEditViewModel(
             return
         }
         setVin(vin)
-        decode()
+        // New rigs decode on their own in setVin; an edited rig decodes because the scan asked for it.
+        if (_state.value.decode == DecodeUi.Idle) decode()
     }
 
     fun decode() {
@@ -250,6 +261,7 @@ private fun VehicleEntity.toForm() = VehicleForm(
     bodyBuilder = bodyBuilder,
     builderJobNumber = builderJobNumber,
     engine = engine,
+    engineSerial = engineSerial,
     station = station,
     notes = notes,
 )
@@ -267,6 +279,7 @@ private fun VehicleForm.toEntity(original: VehicleEntity?, parsedYear: Int?): Ve
         bodyBuilder = bodyBuilder.trim(),
         builderJobNumber = builderJobNumber.trim(),
         engine = engine.trim(),
+        engineSerial = engineSerial.trim().uppercase(),
         station = station.trim(),
         notes = notes.trim(),
     )

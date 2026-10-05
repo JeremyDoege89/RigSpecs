@@ -166,6 +166,11 @@ fun VehicleEditScreen(
                 f.engine, { v -> viewModel.edit { it.copy(engine = v) } }, "Engine",
                 supporting = "e.g. Cummins X12 500 hp", capitalization = KeyboardCapitalization.Words,
             )
+            FormField(
+                f.engineSerial, { v -> viewModel.edit { it.copy(engineSerial = v) } }, "Engine serial number",
+                supporting = "Cummins ESN or Detroit serial, from the engine dataplate. Engine parts catalogs search by it.",
+                capitalization = KeyboardCapitalization.Characters,
+            )
 
             Section("Build")
             FormField(

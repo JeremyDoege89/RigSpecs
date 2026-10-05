@@ -67,12 +67,19 @@ kotlin {
             implementation(libs.camera.view)
             implementation(libs.camera.mlkit.vision)
             implementation(libs.mlkit.barcode)
+            // Page subsets of manuals for assisted import. BouncyCastle only serves certificate-encrypted
+            // PDFs; password-free "secured" manuals use the platform's AES, so it stays out of the APK.
+            implementation("com.tom-roush:pdfbox-android:${libs.versions.pdfbox.android.get()}") {
+                exclude(group = "org.bouncycastle")
+            }
+            implementation(libs.exifinterface)
         }
         val desktopMain by getting {
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation(libs.coroutines.swing)
                 implementation(libs.ktor.client.okhttp)
+                implementation(libs.pdfbox)
             }
         }
         val desktopTest by getting {

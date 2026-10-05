@@ -23,6 +23,7 @@ fun VehicleEntity.loggedFields(): Map<String, String?> = mapOf(
     "bodyBuilder" to bodyBuilder,
     "builderJobNumber" to builderJobNumber,
     "engine" to engine,
+    "engineSerial" to engineSerial,
     "station" to station,
     "photoPath" to photoPath,
     "notes" to notes,
@@ -37,7 +38,11 @@ fun SpecItemEntity.loggedFields(): Map<String, String?> = mapOf(
     "unit" to unit,
     "notes" to notes,
     "sourceDocId" to sourceDocId,
+    "pageHint" to pageHint,
     "safetyCritical" to safetyCritical.toString(),
+    "status" to status.name,
+    "sourceKind" to sourceKind.name,
+    "sourceUrl" to sourceUrl,
     "deleted" to deleted.toString(),
 )
 
@@ -50,6 +55,10 @@ fun PartEntity.loggedFields(): Map<String, String?> = mapOf(
     "qtyPerVehicle" to qtyPerVehicle?.toString(),
     "notes" to notes,
     "sourceDocId" to sourceDocId,
+    "pageHint" to pageHint,
+    "status" to status.name,
+    "sourceKind" to sourceKind.name,
+    "sourceUrl" to sourceUrl,
     "deleted" to deleted.toString(),
 )
 
@@ -60,6 +69,8 @@ fun DocumentEntity.loggedFields(): Map<String, String?> = mapOf(
     "pageHint" to pageHint,
     "deleted" to deleted.toString(),
 )
+
+private val NewRowDefaults = setOf("deleted" to "false", "status" to "VERIFIED", "sourceKind" to "MANUAL")
 
 /**
  * Fields that changed from [old] to [new]. A brand-new row ([old] null) logs every non-blank
@@ -72,7 +83,8 @@ fun diffFields(old: Map<String, String?>?, new: Map<String, String?>): List<Fiel
         val after = norm(value)
         when {
             before == after -> null
-            old == null && field == "deleted" && after == "false" -> null
+            // A new row's defaults say nothing: not deleted, verified, entered by hand.
+            old == null && (field to after) in NewRowDefaults -> null
             else -> FieldChange(field, before, after)
         }
     }
