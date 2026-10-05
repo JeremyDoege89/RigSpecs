@@ -55,6 +55,7 @@ data class ProfileState(
 
 class ProfileViewModel(
     private val vehicleId: String,
+    initialTab: ProfileTab,
     private val repository: RigRepository,
     private val imports: ImportRepository,
     private val settings: SettingsRepository,
@@ -62,7 +63,7 @@ class ProfileViewModel(
     private val files: DocumentFiles,
     private val session: Session,
 ) : ViewModel() {
-    private val tab = MutableStateFlow(ProfileTab.OVERVIEW)
+    private val tab = MutableStateFlow(initialTab)
 
     private val content = combine(
         repository.observeVehicle(vehicleId),

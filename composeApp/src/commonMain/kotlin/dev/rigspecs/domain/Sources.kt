@@ -59,6 +59,8 @@ data class SourcedResult(
     val alreadyThere: Int,
     /** Rows that disagree with a value already in the profile; the profile value is kept. */
     val conflicts: List<SourcedConflict>,
+    /** Rows that replaced a different profile value (only when asked to). */
+    val replaced: Int = 0,
 )
 
 data class SourcedConflict(val what: String, val profileValue: String, val sourceValue: String)

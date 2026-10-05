@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import dev.rigspecs.data.RigRepository
 import dev.rigspecs.data.VehicleEntity
 import dev.rigspecs.domain.FleetFilter
+import dev.rigspecs.domain.SearchGroup
+import dev.rigspecs.domain.SearchIndex
 import dev.rigspecs.domain.Session
 import dev.rigspecs.domain.VehicleType
 import dev.rigspecs.domain.filterFleet
@@ -27,12 +29,22 @@ data class FleetState(
     val canEdit: Boolean = false,
     /** Rows waiting for a person per rig: unverified values plus imported rows. */
     val toReview: Map<String, Int> = emptyMap(),
-)
+    /** Specs and parts matching the search box, grouped by rig; empty when the box is. */
+    val searchGroups: List<SearchGroup> = emptyList(),
+) {
+    val searching: Boolean get() = filter.query.isNotBlank()
+    val hitCount: Int get() = searchGroups.sumOf { it.hits.size }
+}
 
 class FleetViewModel(repository: RigRepository, session: Session) : ViewModel() {
     private val filter = MutableStateFlow(FleetFilter())
 
-    val state: StateFlow<FleetState> = combine(repository.observeVehicles(), filter, repository.observeReviewCounts()) { all, f, counts ->
+    /** Rebuilt when the data changes, not on every keystroke. */
+    private val index = combine(repository.observeVehicles(), repository.observeSearchableSpecs(), repository.observeSearchableParts()) { v, s, p ->
+        SearchIndex(v, s, p)
+    }
+
+    val state: StateFlow<FleetState> = combine(repository.observeVehicles(), filter, repository.observeReviewCounts(), index) { all, f, counts, idx ->
         val sorted = all.sortedWith(compareBy(naturalOrder) { it.unitNumber })
         FleetState(
             loading = false,
@@ -43,6 +55,11 @@ class FleetViewModel(repository: RigRepository, session: Session) : ViewModel() 
             filter = f,
             canEdit = session.canEdit,
             toReview = counts.filter { it.total > 0 }.associate { it.vehicleId to it.total },
+            searchGroups = if (f.query.isBlank()) emptyList() else {
+                // The type and station chips narrow the search too.
+                val allowed = sorted.filterFleet(f.copy(query = "")).map { it.id }.toSet()
+                idx.search(f.query).filter { it.vehicle.id in allowed && it.hits.isNotEmpty() }
+            },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FleetState(canEdit = session.canEdit))
 

@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -69,6 +70,7 @@ fun ReviewScreen(
     val snackbar = remember { SnackbarHostState() }
     var editing by remember { mutableStateOf<ImportRowEntity?>(null) }
     var viewing by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    var confirmingAll by remember { mutableStateOf(false) }
     LaunchedEffect(state.message) {
         state.message?.let {
             snackbar.showSnackbar(it)
@@ -130,6 +132,14 @@ fun ReviewScreen(
             }
             if (state.unverifiedSpecs.isNotEmpty() || state.unverifiedParts.isNotEmpty()) {
                 item(key = "unverified") { Heading("Unverified in the profile") }
+                val bulk = state.unverifiedSpecs.count { !it.safetyCritical } + state.unverifiedParts.size
+                if (bulk > 1) {
+                    item(key = "confirm-all") {
+                        OutlinedButton(onClick = { confirmingAll = true }, modifier = Modifier.fillMaxWidth().heightIn(min = TouchTarget)) {
+                            Text("Confirm all $bulk I've checked")
+                        }
+                    }
+                }
                 items(state.unverifiedSpecs, key = { "s-" + it.id }) { spec ->
                     UnverifiedSpecCard(spec, onConfirm = { viewModel.confirmSpec(spec.id) }, onEdit = { onEditSpec(spec.id) }, onDelete = { viewModel.deleteSpec(spec.id) })
                 }
@@ -152,6 +162,21 @@ fun ReviewScreen(
         )
     }
     viewing?.let { (path, page) -> PageViewerDialog(path, page, onDismiss = { viewing = null }) }
+    if (confirmingAll) {
+        val critical = state.unverifiedSpecs.count { it.safetyCritical }
+        AlertDialog(
+            onDismissRequest = { confirmingAll = false },
+            title = { Text("Confirm them all?") },
+            text = {
+                Text(
+                    "Only if you've checked each value against its source." +
+                        if (critical > 0) " The $critical safety-critical ${if (critical == 1) "value stays" else "values stay"} unverified until confirmed one at a time." else "",
+                )
+            },
+            confirmButton = { TextButton(onClick = { confirmingAll = false; viewModel.confirmAll() }) { Text("Confirm all") } },
+            dismissButton = { TextButton(onClick = { confirmingAll = false }) { Text("Cancel") } },
+        )
+    }
 }
 
 @Composable
@@ -255,7 +280,7 @@ private fun UnverifiedSpecCard(spec: SpecItemEntity, onConfirm: () -> Unit, onEd
     UnverifiedCard(
         title = listOf(spec.component, spec.name).filter { it.isNotBlank() }.joinToString(" · "),
         value = spec.displayValue(),
-        source = spec.sourceKind.label,
+        source = spec.sourceKind.from,
         sourceUrl = spec.sourceUrl,
         safetyCritical = spec.safetyCritical,
         onConfirm = onConfirm, onEdit = onEdit, onDelete = onDelete,
@@ -266,7 +291,7 @@ private fun UnverifiedPartCard(part: PartEntity, onConfirm: () -> Unit, onEdit: 
     UnverifiedCard(
         title = part.component,
         value = part.copyText(),
-        source = part.sourceKind.label,
+        source = part.sourceKind.from,
         sourceUrl = part.sourceUrl,
         safetyCritical = false,
         onConfirm = onConfirm, onEdit = onEdit, onDelete = onDelete,

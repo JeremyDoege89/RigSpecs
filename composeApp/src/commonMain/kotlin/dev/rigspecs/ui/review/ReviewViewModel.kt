@@ -95,6 +95,12 @@ class ReviewViewModel(
     fun confirmPart(id: String) = viewModelScope.launch { rigs.confirmPart(id) }
     fun deleteSpec(id: String) = viewModelScope.launch { rigs.deleteSpec(id) }
     fun deletePart(id: String) = viewModelScope.launch { rigs.deletePart(id) }
+    /** Confirms every unverified value except safety-critical ones, which stay one at a time. */
+    fun confirmAll() = viewModelScope.launch {
+        val n = rigs.confirmAllUnverified(vehicleId)
+        message.value = "Confirmed $n ${if (n == 1) "value" else "values"}"
+    }
+
     fun resume(jobId: String) = runner.start(jobId)
     fun cancel(jobId: String) = runner.cancel(jobId)
     fun messageShown() = message.update { null }

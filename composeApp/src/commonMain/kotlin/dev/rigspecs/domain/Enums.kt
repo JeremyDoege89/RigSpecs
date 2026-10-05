@@ -65,12 +65,13 @@ fun ProfileTab.defaultCategory(): SpecCategory = when (this) {
  */
 enum class VerificationStatus { VERIFIED, UNVERIFIED }
 
-/** Where a spec or part value came from. Stored by name. */
-enum class SourceKind(val label: String) {
-    MANUAL("Entered by hand"),
-    VPIC("NHTSA VIN decode"),
-    OPENLABOR("Open Labor Project"),
-    IMPORT("Imported from a document"),
+/** Where a spec or part value came from. Stored by name, so new kinds are added at the end. */
+enum class SourceKind(val label: String, val from: String) {
+    MANUAL("Entered by hand", "an editor"),
+    VPIC("NHTSA VIN decode", "the VIN decode"),
+    OPENLABOR("Open Labor Project", "Open Labor Project"),
+    IMPORT("Imported from a document", "an imported document"),
+    CSV("Imported from a spreadsheet", "a spreadsheet"),
 }
 
 enum class ImportJobStatus { QUEUED, RUNNING, REVIEW, DONE, FAILED, CANCELLED }

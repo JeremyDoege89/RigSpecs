@@ -6,8 +6,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import dev.rigspecs.di.ItemId
+import dev.rigspecs.domain.ProfileTab
 import dev.rigspecs.domain.SpecCategory
 import dev.rigspecs.domain.defaultCategory
+import dev.rigspecs.ui.csv.CsvImportScreen
 import dev.rigspecs.ui.fleet.FleetScreen
 import dev.rigspecs.ui.importing.ImportSetupScreen
 import dev.rigspecs.ui.review.ReviewScreen
@@ -23,7 +25,8 @@ import org.koin.core.parameter.parametersOf
 
 @Serializable data object FleetRoute
 @Serializable data class VehicleEditRoute(val vehicleId: String? = null)
-@Serializable data class ProfileRoute(val vehicleId: String)
+@Serializable data class ProfileRoute(val vehicleId: String, val tab: String? = null)
+@Serializable data class CsvImportRoute(val vehicleId: String)
 @Serializable data class ReviewRoute(val vehicleId: String)
 @Serializable data class ImportSetupRoute(val documentId: String, val vehicleId: String)
 @Serializable data object SettingsRoute
@@ -49,6 +52,7 @@ fun App() {
                     onOpenVehicle = { nav.navigate(ProfileRoute(it)) },
                     onAddVehicle = { nav.navigate(VehicleEditRoute()) },
                     onOpenSettings = { nav.navigate(SettingsRoute) },
+                    onOpenTab = { id, tab -> nav.navigate(ProfileRoute(id, tab.name)) },
                 )
             }
             composable<VehicleEditRoute> { entry ->
@@ -67,9 +71,11 @@ fun App() {
                 )
             }
             composable<ProfileRoute> { entry ->
-                val id = entry.toRoute<ProfileRoute>().vehicleId
+                val route = entry.toRoute<ProfileRoute>()
+                val id = route.vehicleId
+                val tab = ProfileTab.entries.firstOrNull { it.name == route.tab } ?: ProfileTab.OVERVIEW
                 ProfileScreen(
-                    viewModel = koinViewModel { parametersOf(id) },
+                    viewModel = koinViewModel { parametersOf(id, tab) },
                     onBack = { nav.popBackStack(FleetRoute, inclusive = false) },
                     onEditVehicle = { nav.navigate(VehicleEditRoute(id)) },
                     onAddSpec = { tab -> nav.navigate(ItemEditRoute(ItemKind.SPEC, id, category = tab.defaultCategory())) },
@@ -78,6 +84,15 @@ fun App() {
                     onEditPart = { nav.navigate(ItemEditRoute(ItemKind.PART, id, itemId = it)) },
                     onReview = { nav.navigate(ReviewRoute(id)) },
                     onImport = { docId -> nav.navigate(ImportSetupRoute(docId, id)) },
+                    onImportCsv = { nav.navigate(CsvImportRoute(id)) },
+                )
+            }
+            composable<CsvImportRoute> { entry ->
+                val id = entry.toRoute<CsvImportRoute>().vehicleId
+                CsvImportScreen(
+                    viewModel = koinViewModel { parametersOf(id) },
+                    onBack = { nav.popBackStack() },
+                    onReview = { nav.navigate(ReviewRoute(id)) { popUpTo<CsvImportRoute> { inclusive = true } } },
                 )
             }
             composable<ReviewRoute> { entry ->

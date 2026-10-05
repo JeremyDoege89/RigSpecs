@@ -57,6 +57,8 @@ class RigRepository(
     fun observeReviewCounts(): Flow<List<ReviewCount>> = vehicles.observeReviewCounts()
     fun observeUnverifiedSpecs(vehicleId: String): Flow<List<SpecItemEntity>> = specs.observeUnverified(vehicleId)
     fun observeUnverifiedParts(vehicleId: String): Flow<List<PartEntity>> = parts.observeUnverified(vehicleId)
+    fun observeSearchableSpecs(): Flow<List<SpecItemEntity>> = specs.observeAllFilled()
+    fun observeSearchableParts(): Flow<List<PartEntity>> = parts.observeAllNumbered()
 
     suspend fun vehicle(id: String) = vehicles.get(id)
     suspend fun spec(id: String) = specs.get(id)
@@ -197,16 +199,22 @@ class RigRepository(
     }
 
     /**
-     * Writes an API source's rows into a profile as UNVERIFIED. A row fills a matching blank
-     * (usually a template field) instead of adding a duplicate, a row that agrees with the
-     * profile is skipped, and a row that disagrees is reported and left out: the value an
-     * editor already entered wins until they decide otherwise.
+     * Writes outside rows (an API source, a spreadsheet) into a profile as UNVERIFIED. A row fills
+     * a matching blank (usually a template field) instead of adding a duplicate, and a row that
+     * agrees with the profile is skipped. A row that disagrees is reported and left out, so the
+     * value an editor entered wins, unless [replaceConflicts] says the import should replace it.
      */
-    suspend fun addSourcedRows(vehicleId: String, sourceKind: SourceKind, rows: List<CandidateRow>): SourcedResult = write {
+    suspend fun addSourcedRows(
+        vehicleId: String,
+        sourceKind: SourceKind,
+        rows: List<CandidateRow>,
+        replaceConflicts: Boolean = false,
+    ): SourcedResult = write {
         val vehicle = vehicles.get(vehicleId) ?: return@write SourcedResult(0, 0, 0, emptyList())
         var added = 0
         var filled = 0
         var same = 0
+        var replaced = 0
         val conflicts = mutableListOf<SourcedConflict>()
         rows.filter { it.isUsable }.forEach { c ->
             val probe = c.toImportRow(id = "", departmentId = vehicle.departmentId, jobId = "", vehicleId = vehicleId, now = 0, userId = "")
@@ -220,14 +228,40 @@ class RigRepository(
                     filled++
                 }
                 is ImportMatch.Same -> same++
-                is ImportMatch.Conflict -> conflicts += SourcedConflict(
-                    what = listOf(c.component, c.name).filter { it.isNotBlank() }.joinToString(" · "),
-                    profileValue = m.current,
-                    sourceValue = probe.displayValue(),
-                )
+                is ImportMatch.Conflict -> if (replaceConflicts) {
+                    fillSourced(m.targetId, c, sourceKind)
+                    replaced++
+                } else {
+                    conflicts += SourcedConflict(
+                        what = listOf(c.component, c.name).filter { it.isNotBlank() }.joinToString(" · "),
+                        profileValue = m.current,
+                        sourceValue = probe.displayValue(),
+                    )
+                }
             }
         }
-        SourcedResult(added, filled, same, conflicts)
+        SourcedResult(added, filled, same, conflicts, replaced)
+    }
+
+    /**
+     * Confirms a rig's unverified values in one go, leaving out safety-critical ones: brakes,
+     * wheels, aerial and pump values still have to be checked one at a time. Returns how many.
+     */
+    suspend fun confirmAllUnverified(vehicleId: String): Int = write {
+        var n = 0
+        specs.listForVehicle(vehicleId).filter { it.status == VerificationStatus.UNVERIFIED && !it.safetyCritical }.forEach { old ->
+            val row = old.copy(status = VerificationStatus.VERIFIED, verifiedBy = session.userId, verifiedAt = ids.now(), updatedAt = ids.now(), updatedBy = session.userId, dirty = true)
+            specs.upsert(row)
+            log(EntityType.SPEC, row.id, diffFields(old.loggedFields(), row.loggedFields()))
+            n++
+        }
+        parts.listForVehicle(vehicleId).filter { it.status == VerificationStatus.UNVERIFIED }.forEach { old ->
+            val row = old.copy(status = VerificationStatus.VERIFIED, verifiedBy = session.userId, verifiedAt = ids.now(), updatedAt = ids.now(), updatedBy = session.userId, dirty = true)
+            parts.upsert(row)
+            log(EntityType.PART, row.id, diffFields(old.loggedFields(), row.loggedFields()))
+            n++
+        }
+        n
     }
 
     private suspend fun insertSourced(v: VehicleEntity, sourceKind: SourceKind, c: CandidateRow) {

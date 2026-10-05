@@ -77,7 +77,7 @@ internal fun PortalRow(links: List<PortalLink>, onPortal: (PortalLink) -> Unit) 
 @Composable
 internal fun UnverifiedBadge(source: SourceKind) {
     Text(
-        "Unverified · from ${source.label}",
+        "Unverified · from ${source.from}",
         style = MaterialTheme.typography.labelLarge,
         color = WarnColor,
         modifier = Modifier.padding(top = 2.dp),

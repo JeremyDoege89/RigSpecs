@@ -280,7 +280,7 @@ private fun UnverifiedNotice(source: SourceKind, url: String) {
         Modifier.fillMaxWidth().padding(vertical = 8.dp)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(12.dp)).padding(12.dp),
     ) {
-        Text("Unverified · from ${source.label}", color = WarnColor, style = MaterialTheme.typography.titleMedium)
+        Text("Unverified · from ${source.from}", color = WarnColor, style = MaterialTheme.typography.titleMedium)
         Text(
             "Nobody has checked this against the manual yet. Confirm it once you have.",
             style = MaterialTheme.typography.bodyMedium,

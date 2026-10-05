@@ -12,10 +12,12 @@ import dev.rigspecs.data.vin.VinDecoder
 import dev.rigspecs.data.vin.VpicRemote
 import dev.rigspecs.data.vin.vpicHttpClient
 import dev.rigspecs.domain.Ids
+import dev.rigspecs.domain.ProfileTab
 import dev.rigspecs.domain.LocalSession
 import dev.rigspecs.domain.Session
 import dev.rigspecs.domain.SpecCategory
 import dev.rigspecs.domain.SystemIds
+import dev.rigspecs.ui.csv.CsvImportViewModel
 import dev.rigspecs.ui.fleet.FleetViewModel
 import dev.rigspecs.ui.importing.ImportSetupViewModel
 import dev.rigspecs.ui.review.ReviewViewModel
@@ -46,7 +48,8 @@ val sharedModule: Module = module {
 
     viewModel { FleetViewModel(get(), get()) }
     viewModel { p -> VehicleEditViewModel(p.getOrNull<String>(), get(), get()) }
-    viewModel { p -> ProfileViewModel(p.get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { p -> ProfileViewModel(p.get(), p.getOrNull<ProfileTab>() ?: ProfileTab.OVERVIEW, get(), get(), get(), get(), get(), get()) }
+    viewModel { p -> CsvImportViewModel(p.get(), get()) }
     viewModel { p -> ReviewViewModel(p.get(), get(), get(), get()) }
     viewModel { p -> ImportSetupViewModel(p.get(), get(), get(), get(), get(), get(), get()) }
     viewModel { SettingsViewModel(get(), get()) }

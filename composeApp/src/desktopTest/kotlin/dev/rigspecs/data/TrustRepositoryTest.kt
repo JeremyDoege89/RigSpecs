@@ -137,4 +137,40 @@ class TrustRepositoryTest {
         settings.set(Portal.CUMMINS.urlKey, Portal.CUMMINS.defaultUrl)
         assertNull(db.settingDao().get(Portal.CUMMINS.urlKey))
     }
+
+    @Test
+    fun spreadsheetImportCanReplaceDifferingValues() = runTest {
+        val oilId = rigs.observeSpecs(vehicleId).first().first { it.component == "Engine oil" && it.name == "Capacity" }.id
+        rigs.saveSpec(rigs.spec(oilId)!!.copy(value = "7.7", unit = "qt"))
+        val rows = listOf(olp("Engine oil", "Capacity", "8", "qt"))
+
+        val kept = rigs.addSourcedRows(vehicleId, SourceKind.CSV, rows)
+        assertEquals(1, kept.conflicts.size)
+        assertEquals("7.7", rigs.spec(oilId)!!.value)
+
+        val replaced = rigs.addSourcedRows(vehicleId, SourceKind.CSV, rows, replaceConflicts = true)
+        assertEquals(1, replaced.replaced)
+        val oil = rigs.spec(oilId)!!
+        assertEquals("8", oil.value)
+        assertEquals(VerificationStatus.UNVERIFIED, oil.status)
+        assertEquals(SourceKind.CSV, oil.sourceKind)
+    }
+
+    @Test
+    fun confirmAllLeavesSafetyCriticalValuesUnverified() = runTest {
+        rigs.addSourcedRows(
+            vehicleId, SourceKind.CSV,
+            listOf(
+                olp("Engine oil", "Capacity", "8", "qt"),
+                olp("Lug nuts", "Torque", "100", "ft-lb"), // fills the template's safety-critical blank
+                CandidateRow(ImportRowKind.PART, "Oil filter", oemNumber = "FL-500S", system = PartSystem.ENGINE),
+            ),
+        )
+        assertEquals(2, rigs.observeUnverifiedSpecs(vehicleId).first().size)
+        assertEquals(2, rigs.confirmAllUnverified(vehicleId))
+        val left = rigs.observeUnverifiedSpecs(vehicleId).first()
+        assertEquals(listOf("Lug nuts"), left.map { it.component })
+        assertTrue(left.single().safetyCritical)
+        assertTrue(rigs.observeUnverifiedParts(vehicleId).first().isEmpty())
+    }
 }

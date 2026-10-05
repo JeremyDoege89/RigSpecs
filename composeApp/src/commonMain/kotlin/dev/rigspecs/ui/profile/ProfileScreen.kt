@@ -60,6 +60,8 @@ import dev.rigspecs.domain.ImportJobStatus
 import dev.rigspecs.domain.ProfileTab
 import dev.rigspecs.domain.VerificationStatus
 import dev.rigspecs.domain.copyText
+import dev.rigspecs.domain.csvFileName
+import dev.rigspecs.domain.exportRigCsv
 import dev.rigspecs.domain.description
 import dev.rigspecs.domain.displayValue
 import dev.rigspecs.domain.vinDecodeDetails
@@ -68,6 +70,7 @@ import dev.rigspecs.ui.common.EmptyState
 import dev.rigspecs.ui.common.LabeledFab
 import dev.rigspecs.ui.common.icon
 import dev.rigspecs.ui.common.rememberCopier
+import dev.rigspecs.ui.csv.rememberCsvFiles
 import dev.rigspecs.ui.importing.rememberDocumentPicker
 import dev.rigspecs.ui.theme.TouchTarget
 import dev.rigspecs.ui.theme.ValueStyle
@@ -85,6 +88,7 @@ fun ProfileScreen(
     onEditPart: (String) -> Unit,
     onReview: () -> Unit,
     onImport: (documentId: String) -> Unit,
+    onImportCsv: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
@@ -123,6 +127,7 @@ fun ProfileScreen(
         onPicked = { file -> viewModel.addFileDocument(file) { docId -> onImport(docId) } },
         onError = say,
     )
+    val csv = rememberCsvFiles(onPicked = { _, _ -> }, onSaved = say, onError = say)
     var choosingDocument by remember { mutableStateOf(false) }
     var docActions by remember { mutableStateOf<DocumentEntity?>(null) }
     var menuOpen by remember { mutableStateOf(false) }
@@ -147,6 +152,20 @@ fun ProfileScreen(
                         IconButton(onClick = onEditVehicle) { Icon(Icons.Filled.Edit, contentDescription = "Edit rig") }
                         IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "More") }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Export to CSV") },
+                                onClick = {
+                                    menuOpen = false
+                                    csv.save(csvFileName(vehicle.unitNumber), exportRigCsv(state.specs, state.parts, state.documentsById))
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Import from CSV") },
+                                onClick = {
+                                    menuOpen = false
+                                    onImportCsv()
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Delete rig", color = MaterialTheme.colorScheme.error) },
                                 onClick = {

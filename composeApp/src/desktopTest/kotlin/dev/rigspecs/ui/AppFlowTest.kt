@@ -209,5 +209,20 @@ class AppFlowTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Medic 3").fetchSemanticsNodes().isEmpty() }
         waitForText("Engine 2")
         shot("9-fleet-search")
+
+        // Search reaches specs and part numbers on every rig: tap copies, the arrow opens the rig.
+        onNodeWithContentDescription("Clear search").performClick()
+        onNode(hasSetTextAction()).performTextInput("LF-9009")
+        waitForText("Specs and parts · 1")
+        waitForText("NAPA 1792")
+        shot("10-search-part")
+        onNodeWithText("LF9009").performClick()
+        waitForText("Copied Oil filter: LF9009")
+        onNodeWithContentDescription("Clear search").performClick()
+        onNode(hasSetTextAction()).performTextInput("lug torque")
+        waitForText("450 ft-lb")
+        onNodeWithContentDescription("Open on the rig").performClick()
+        // Lands on Engine 2's Torque tab.
+        waitForText("Source: E-One delivery manual, p. 212")
     }
 }

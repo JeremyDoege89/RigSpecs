@@ -43,6 +43,14 @@ assisted import of manuals, parts lists and photos into rows an editor reviews; 
 `supabase/functions/extract-specs` server function that does the extraction
 ([supabase/README.md](supabase/README.md)).
 
+Milestone 5 (search and CSV): the fleet search box also finds specs and part numbers across every
+rig ("lug torque", "LF-9009", "oil filter medic 3"), grouped by rig, with tap-to-copy and a jump to
+the right tab; part numbers match without punctuation and plain numbers match whole ("3" finds
+Medic 3, not Medic 30). Each rig exports to CSV with its blanks, so a sheet can be filled in and
+imported back; import previews what every row does, names the bad lines, keeps differing values
+unless told to replace them, and lands rows unverified. Review can confirm every checked value at
+once, except safety-critical ones.
+
 Sign-in and sync arrive in milestone 4; until then everything belongs to one local department.
 
 `VPIC_LIVE=1 ./gradlew :composeApp:desktopTest --tests '*LiveVpicTest*'` checks the real NHTSA service.

@@ -59,6 +59,10 @@ interface SpecItemDao {
     @Query("SELECT * FROM spec_item WHERE vehicleId = :vehicleId AND deleted = 0 AND status = 'UNVERIFIED' ORDER BY sortOrder")
     fun observeUnverified(vehicleId: String): Flow<List<SpecItemEntity>>
 
+    /** Every rig's filled-in specs, for search. */
+    @Query("SELECT * FROM spec_item WHERE deleted = 0 AND value != ''")
+    fun observeAllFilled(): Flow<List<SpecItemEntity>>
+
     @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM spec_item WHERE vehicleId = :vehicleId")
     suspend fun nextSortOrder(vehicleId: String): Int
 
@@ -79,6 +83,10 @@ interface PartDao {
 
     @Query("SELECT * FROM part WHERE vehicleId = :vehicleId AND deleted = 0 AND status = 'UNVERIFIED' ORDER BY sortOrder")
     fun observeUnverified(vehicleId: String): Flow<List<PartEntity>>
+
+    /** Every rig's parts that have a number, for search. */
+    @Query("SELECT * FROM part WHERE deleted = 0 AND (oemNumber != '' OR aftermarketNumbers != '')")
+    fun observeAllNumbered(): Flow<List<PartEntity>>
 
     @Query("SELECT COALESCE(MAX(sortOrder), -1) + 1 FROM part WHERE vehicleId = :vehicleId")
     suspend fun nextSortOrder(vehicleId: String): Int
