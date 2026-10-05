@@ -21,6 +21,10 @@ actual fun rememberDocumentPicker(onPicked: (PickedDocument) -> Unit, onError: (
         object : DocumentPicker {
             override fun pickFile() {
                 val dialog = FileDialog(null as Frame?, "Choose a manual, parts list or photo", FileDialog.LOAD).apply {
+                    // Start where documents usually are, not in the app's install folder.
+                    directory = startFolder()
+                    // Windows' native dialog filters by pattern; other platforms use the filter below.
+                    file = "*.pdf;*.jpg;*.jpeg;*.png"
                     setFilenameFilter { _, name -> name.lowercase().substringAfterLast('.') in Accepted }
                     isVisible = true
                 }
@@ -40,5 +44,10 @@ actual fun rememberDocumentPicker(onPicked: (PickedDocument) -> Unit, onError: (
 }
 
 private val Accepted = setOf("pdf", "jpg", "jpeg", "png")
+
+private fun startFolder(): String {
+    val home = File(System.getProperty("user.home"))
+    return listOf("Downloads", "Documents").map { File(home, it) }.firstOrNull { it.isDirectory }?.absolutePath ?: home.absolutePath
+}
 
 actual fun decodeImage(bytes: ByteArray): ImageBitmap = Image.makeFromEncoded(bytes).toComposeImageBitmap()

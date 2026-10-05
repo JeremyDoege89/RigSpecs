@@ -49,7 +49,7 @@ fun PageViewerDialog(path: String, page: Int, onDismiss: () -> Unit) {
     }
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
-    val transform = rememberTransformableState { zoom, pan, _ ->
+    val transform = rememberTransformableState { _, zoom, pan, _ ->
         scale = (scale * zoom).coerceIn(1f, 6f)
         offset = if (scale == 1f) Offset.Zero else offset + pan
     }

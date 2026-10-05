@@ -72,7 +72,11 @@ data class VehicleEditState(
     val saving: Boolean = false,
     /** Set once saved; the screen navigates away with it. */
     val savedId: String? = null,
-)
+    /** The form as it was opened, to tell whether leaving would lose anything. */
+    val initialForm: VehicleForm = VehicleForm(),
+) {
+    val hasChanges: Boolean get() = !loading && savedId == null && form != initialForm
+}
 
 class VehicleEditViewModel(
     private val vehicleId: String?,
@@ -104,7 +108,8 @@ class VehicleEditViewModel(
             val v = repository.vehicle(vehicleId)
             original = v
             _state.update {
-                it.copy(loading = false, form = v?.toForm() ?: VehicleForm())
+                val form = v?.toForm() ?: VehicleForm()
+                it.copy(loading = false, form = form, initialForm = form)
             }
         }
     }
@@ -126,11 +131,14 @@ class VehicleEditViewModel(
     /** The VIN last decoded without being asked, so typing doesn't call NHTSA twice for it. */
     private var autoDecoded: String? = null
 
-    fun setVin(text: String) {
+    fun setVin(raw: String) {
+        // VINs never have spaces and never run past 17 characters (older ones are shorter).
+        val text = raw.filterNot(Char::isWhitespace).take(VinValidator.LENGTH)
         edit { it.copy(vin = text) }
         _state.update { s ->
             // A decode for a different VIN no longer applies.
             val stale = (s.decode as? DecodeUi.Ready)?.vin?.let { it != VinValidator.normalize(text) } ?: false
+            if (stale) autoDecoded = null // so typing that VIN again brings its decode back
             s.copy(vinError = null, decode = if (stale || s.decode is DecodeUi.Failed) DecodeUi.Idle else s.decode)
         }
         // Every new rig gets a vPIC lookup as soon as a complete VIN is in; the result still waits for "Use these".

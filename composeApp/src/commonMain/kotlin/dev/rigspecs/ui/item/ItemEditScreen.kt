@@ -54,6 +54,8 @@ import dev.rigspecs.domain.isAllowedPortalUrl
 import dev.rigspecs.domain.formatTimestamp
 import dev.rigspecs.ui.common.ChoiceField
 import dev.rigspecs.ui.common.ConfirmDialog
+import dev.rigspecs.ui.common.DiscardChangesDialog
+import dev.rigspecs.ui.common.PlatformBackHandler
 import dev.rigspecs.ui.common.FormField
 import dev.rigspecs.ui.profile.DocumentDialog
 import dev.rigspecs.ui.theme.TouchTarget
@@ -71,6 +73,12 @@ private sealed interface SourceChoice {
 fun ItemEditScreen(viewModel: ItemEditViewModel, onClose: () -> Unit) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.done) { if (state.done) onClose() }
+    var confirmDiscard by remember { mutableStateOf(false) }
+    val requestBack = { if (state.hasChanges) confirmDiscard = true else onClose() }
+    PlatformBackHandler(enabled = state.hasChanges) { confirmDiscard = true }
+    if (confirmDiscard) {
+        DiscardChangesDialog(onDiscard = { confirmDiscard = false; onClose() }, onKeepEditing = { confirmDiscard = false })
+    }
     var confirmDelete by remember { mutableStateOf(false) }
     var addDocument by remember { mutableStateOf(false) }
     val isSpec = state.kind == ItemKind.SPEC
@@ -81,7 +89,7 @@ fun ItemEditScreen(viewModel: ItemEditViewModel, onClose: () -> Unit) {
             TopAppBar(
                 title = { Text(if (state.isNew) "Add $noun" else "Edit $noun") },
                 navigationIcon = {
-                    IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    IconButton(onClick = requestBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
                 actions = {
                     if (!state.isNew) {

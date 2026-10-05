@@ -185,3 +185,21 @@ fun LabeledFab(text: String, icon: ImageVector, onClick: () -> Unit, modifier: M
 
 /** Bottom padding that keeps the last list row clear of a floating action button. */
 val FabClearance = PaddingValues(bottom = 96.dp)
+
+/** Intercepts the system back gesture where there is one (Android); a no-op on the desktop. */
+@Composable
+expect fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit)
+
+/** Asks before leaving a form with unsaved entries. */
+@Composable
+fun DiscardChangesDialog(onDiscard: () -> Unit, onKeepEditing: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onKeepEditing,
+        title = { Text("Discard changes?") },
+        text = { Text("What you entered on this form hasn't been saved.") },
+        confirmButton = {
+            TextButton(onClick = onDiscard) { Text("Discard", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = { TextButton(onClick = onKeepEditing) { Text("Keep editing") } },
+    )
+}

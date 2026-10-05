@@ -35,6 +35,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -45,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.rigspecs.domain.VehicleType
 import dev.rigspecs.ui.common.ChoiceField
+import dev.rigspecs.ui.common.DiscardChangesDialog
+import dev.rigspecs.ui.common.PlatformBackHandler
 import dev.rigspecs.ui.common.FormField
 import dev.rigspecs.ui.scan.rememberVinScanner
 import dev.rigspecs.ui.theme.TouchTarget
@@ -60,13 +65,19 @@ fun VehicleEditScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val scan = rememberVinScanner(viewModel::onScanned)
     LaunchedEffect(state.savedId) { state.savedId?.let { onSaved(it, state.isNew) } }
+    var confirmDiscard by remember { mutableStateOf(false) }
+    val requestBack = { if (state.hasChanges) confirmDiscard = true else onBack() }
+    PlatformBackHandler(enabled = state.hasChanges) { confirmDiscard = true }
+    if (confirmDiscard) {
+        DiscardChangesDialog(onDiscard = { confirmDiscard = false; onBack() }, onKeepEditing = { confirmDiscard = false })
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (state.isNew) "Add rig" else "Edit rig") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    IconButton(onClick = requestBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
                 },
             )
         },

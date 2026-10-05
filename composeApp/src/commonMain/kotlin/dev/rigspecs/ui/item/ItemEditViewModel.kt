@@ -61,7 +61,11 @@ data class ItemEditState(
     val saving: Boolean = false,
     /** Saved or deleted: the screen closes. */
     val done: Boolean = false,
-)
+    /** The form as it was opened, to tell whether leaving would lose anything. */
+    val initialForm: ItemForm? = null,
+) {
+    val hasChanges: Boolean get() = !loading && !done && initialForm != null && form != initialForm
+}
 
 class ItemEditViewModel(
     private val kind: ItemKind,
@@ -107,7 +111,7 @@ class ItemEditViewModel(
                     }
                 }
             }
-            _state.update { it.copy(loading = false) }
+            _state.update { it.copy(loading = false, initialForm = it.form) }
         }
     }
 

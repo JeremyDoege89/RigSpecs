@@ -124,7 +124,7 @@ compose.desktop {
             // Msi builds only on Windows; Deb lets this Linux host smoke-test packaging.
             targetFormats(TargetFormat.Msi, TargetFormat.Deb)
             packageName = "RigSpecs"
-            packageVersion = "0.3.0"
+            packageVersion = "0.3.1"
             description = "Specs, torque values, fluids and part numbers for every rig"
             vendor = "Rig Specs"
             // On top of Compose's defaults (java.desktop, java.logging, jdk.crypto.ec): what

@@ -46,6 +46,7 @@ import org.koin.dsl.module
 import java.io.File
 import javax.imageio.ImageIO
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 /**
  * Drives the main flows through the real App() against an in-memory database and a fake vPIC,
@@ -168,8 +169,23 @@ class AppFlowTest {
         // A second rig without a template, typed by hand; the failed decode doesn't block saving.
         onNodeWithContentDescription("Back").performClick()
         waitForText("Engine 2")
+        // Leaving a half-filled form asks first; "Keep editing" keeps what was typed.
         onNodeWithContentDescription("Add rig").performClick()
-        type("VIN", "1FDXE4FN8LDC00000")
+        type("Unit number *", "Scratch")
+        onNodeWithContentDescription("Back").performClick()
+        waitForText("Discard changes?")
+        onNodeWithText("Keep editing").performClick()
+        waitForText("Scratch")
+        onNodeWithContentDescription("Back").performClick()
+        onNodeWithText("Discard").performClick()
+        waitForText("Engine 2")
+        assertTrue(onAllNodesWithText("Scratch").fetchSemanticsNodes().isEmpty())
+
+        onNodeWithContentDescription("Add rig").performClick()
+        // Pasted with spaces and junk on the end: trimmed to the 17 characters a VIN has, then decoded.
+        type("VIN", "1FDX E4FN8 LDC00000 extra")
+        waitForText("1FDXE4FN8LDC00000")
+        assertTrue(onAllNodesWithText("extra", substring = true).fetchSemanticsNodes().isEmpty())
         waitForText("NHTSA doesn't recognize this VIN")
         type("Unit number *", "Medic 3")
         onNode(hasText("Type") and hasClickAction()).performClick()

@@ -17,7 +17,7 @@ fun stampSpecSave(old: SpecItemEntity?, draft: SpecItemEntity, confirm: Boolean,
     val sourced = old?.sourceKind == SourceKind.OPENLABOR || old?.sourceKind == SourceKind.VPIC
     val status = if (wasUnverified && !confirm) VerificationStatus.UNVERIFIED else VerificationStatus.VERIFIED
     val stamp = status == VerificationStatus.VERIFIED && draft.value.isNotBlank() && (valueChanged || wasUnverified)
-    val becameManual = valueChanged && sourced && old != null
+    val becameManual = valueChanged && sourced
     return draft.copy(
         status = status,
         sourceKind = if (becameManual) SourceKind.MANUAL else draft.sourceKind,
@@ -44,7 +44,7 @@ fun stampPartSave(old: PartEntity?, draft: PartEntity, confirm: Boolean, userId:
     val sourced = old?.sourceKind == SourceKind.OPENLABOR || old?.sourceKind == SourceKind.VPIC
     val status = if (wasUnverified && !confirm) VerificationStatus.UNVERIFIED else VerificationStatus.VERIFIED
     val stamp = status == VerificationStatus.VERIFIED && hasNumbers && (valueChanged || wasUnverified)
-    val becameManual = valueChanged && sourced && old != null
+    val becameManual = valueChanged && sourced
     return draft.copy(
         status = status,
         sourceKind = if (becameManual) SourceKind.MANUAL else draft.sourceKind,
