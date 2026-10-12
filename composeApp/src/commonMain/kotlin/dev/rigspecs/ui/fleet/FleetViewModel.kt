@@ -12,10 +12,12 @@ import dev.rigspecs.domain.VehicleType
 import dev.rigspecs.domain.filterFleet
 import dev.rigspecs.domain.naturalOrder
 import dev.rigspecs.domain.stations
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
@@ -42,7 +44,7 @@ class FleetViewModel(repository: RigRepository, session: Session) : ViewModel() 
     /** Rebuilt when the data changes, not on every keystroke. */
     private val index = combine(repository.observeVehicles(), repository.observeSearchableSpecs(), repository.observeSearchableParts()) { v, s, p ->
         SearchIndex(v, s, p)
-    }
+    }.flowOn(Dispatchers.Default) // thousands of rows: keep it off the main thread
 
     val state: StateFlow<FleetState> = combine(repository.observeVehicles(), filter, repository.observeReviewCounts(), index) { all, f, counts, idx ->
         val sorted = all.sortedWith(compareBy(naturalOrder) { it.unitNumber })

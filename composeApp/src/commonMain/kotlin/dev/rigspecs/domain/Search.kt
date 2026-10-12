@@ -40,7 +40,7 @@ class SearchIndex(vehicles: List<VehicleEntity>, specs: List<SpecItemEntity>, pa
     }
     /** Each rig's unit number in words: "Engine 2" gives engine, 2. */
     private val unitWords: Map<String, List<String>> = rigs.mapValues { (_, v) ->
-        v.unitNumber.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+        v.unitNumber.lowercase().split(NON_WORD).filter { it.isNotEmpty() }
     }.filterValues { words -> words.any { w -> w.any { it.isDigit() } } }
     private val entries: List<Entry> =
         specs.filter { !it.deleted && it.value.isNotBlank() && it.vehicleId in rigs }.map {
@@ -110,7 +110,11 @@ class SearchIndex(vehicles: List<VehicleEntity>, specs: List<SpecItemEntity>, pa
 
 /** Query words with punctuation dropped: "LF-9009" becomes "lf9009", "15W-40" becomes "15w40". */
 fun queryWords(query: String): List<String> =
-    query.lowercase().split(Regex("\\s+")).map { w -> w.filter { it.isLetterOrDigit() } }.filter { it.isNotEmpty() }
+    query.lowercase().split(WHITESPACE).map { w -> w.filter { it.isLetterOrDigit() } }.filter { it.isNotEmpty() }
+
+// Compiled once: searchTokens runs for every spec and part when the index is rebuilt.
+private val WHITESPACE = Regex("\\s+")
+private val NON_WORD = Regex("[^\\p{L}\\p{N}]+")
 
 /**
  * Words to match against: each word lower-cased with its punctuation dropped ("LF-9009" gives
@@ -118,10 +122,10 @@ fun queryWords(query: String): List<String> =
  */
 fun searchTokens(vararg fields: String): Set<String> = buildSet {
     fields.forEach { field ->
-        field.lowercase().split(Regex("\\s+")).forEach { chunk ->
+        field.lowercase().split(WHITESPACE).forEach { chunk ->
             val joined = chunk.filter { it.isLetterOrDigit() }
             if (joined.isNotEmpty()) add(joined)
-            chunk.split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }.forEach { add(it) }
+            chunk.split(NON_WORD).filter { it.isNotEmpty() }.forEach { add(it) }
         }
     }
 }
